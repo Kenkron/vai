@@ -1,7 +1,5 @@
 use macroquad::prelude::*;
 
-use na::ComplexField;
-//mod mesh;
 use nalgebra as na;
 mod vai;
 
@@ -23,100 +21,66 @@ fn outside(x: f32, y: f32) -> f32 {
     return w1 + w2;
 }
 
-fn test_one(input: &na::Matrix3x1<f32>, layer1: &na::Matrix3<f32>, layer2: &na::Matrix1x3<f32>) -> f32 {
-    let mut out1 = layer1 * input;
-    out1.apply(|x| *x = x.max(0.));
-    let out2 = layer2 * out1;
-    return out2[0];
-}
-
-fn test(layer1: &na::Matrix3<f32>, layer2: &na::Matrix1x3<f32>) -> f32{
+fn test<const C: usize>(
+    ai: &vai::VAI<3,1,C>,
+    debug: impl Fn(f32, f32, usize) -> ())
+-> f32{
     let mut miss_outer = 0.0;
     let mut miss_inner = 0.0;
-    for _ in 0..10000 {
+    for _ in 0..1000 {
         let mut input = na::Matrix3x1::<f32>::new_random() * 5.0;
         input[0] = 5.0;
-        let out = test_one(&input, layer1, layer2);
+        let out = ai.process(&input)[0];
         let actual = outside(input[1], input[2]);
+        let path:usize;
         if actual > 0. {
             if !(out > 0.) {
+                path = 1;
                 miss_outer += 1.;
+            } else {
+                path = 2;
             }
         } else {
             if out > 0. {
+                path = 3;
                 miss_inner += 1.;
+            } else {
+                path = 4;
             }
         }
+        debug(input[1], input[2], path);
     }
     return miss_outer * miss_outer + miss_inner * miss_inner;
-}
-
-fn test_render(layer1: &na::Matrix3<f32>, layer2: &na::Matrix1x3<f32>) -> f32{
-    let mut miss_outer = 0.0;
-    let mut miss_inner = 0.0;
-    rand::srand((mouse_position().0 + mouse_position().1 * screen_width()) as u64);
-    for _ in 0..1000 {
-        //let input = na::Matrix2x1::<f32>::new_random() * 5.0;
-        let x = rand::gen_range(0., 5.);
-        let y = rand::gen_range(0., 5.);
-        let input = na::Matrix3x1::new(5.0, x, y);
-        let out = test_one(&input, layer1, layer2);
-        let mut marker = GRAY;
-        let actual = outside(input[1], input[2]);
-        if actual > 0. {
-            if out > 0. {
-                marker = PURPLE;
-            } else {
-                marker = RED;
-                miss_outer += 1.;
-            }
-        } else {
-            if out > 0. {
-                marker = YELLOW;
-                miss_inner += 1.;
-            } else {
-                marker = GREEN;
-            }
-        }
-        draw_circle(input[1] * 50., input[2] * 50., 2., marker);
-    }
-    return (miss_outer * miss_outer + miss_inner * miss_inner) * 10.;
 }
 
 #[macroquad::main("World's Worst AI")]
 async fn main() {
 
-    let mut layer1 = na::Matrix3::<f32>::new_random();
-    layer1 = layer1.add_scalar(-0.5).scale(5.);
-    let mut layer2 = na::Matrix1x3::<f32>::new_random();
-    layer2 = layer2.add_scalar(-0.5).scale(5.);
-    let mut score = test(&layer1, &layer2);
+    let mut best_ai = vai::VAI::<3, 1, 1>::new();
+    best_ai = best_ai.create_variant();
+    let mut score = test(&best_ai, |_,_,_| ());
 
-    println!("Starting matricies:\n{}\n{}", layer1, layer2);
+    println!("Starting ai:\n{}", best_ai);
     println!("Starting score: {}", score);
 
-    let mut t1 = layer1.clone();
-    let mut t2 = layer2.clone();
-    let mut st = test(&t1, &t2);
+    let mut test_ai = best_ai.clone();
+    let mut tweaking = false;
     loop {
+        if is_key_down(KeyCode::T) {
+            tweaking = !tweaking;
+        }
         if !is_key_down(KeyCode::Space) {
             // Some mutations will be big, some small
-            let rand_scale = rand::gen_range(0.0, 2.) * rand::gen_range(0.0, 2.);
-            let mut l1 = na::Matrix3::<f32>::new_random();
-            l1 = l1.add_scalar(-0.5).scale(rand_scale);
-            l1 += layer1;
-            t1 = l1.clone();
-            let mut l2 = na::Matrix1x3::<f32>::new_random();
-            l2 = l2.add_scalar(-0.5).scale(rand_scale);
-            l2 += layer2;
-            t2 = l2.clone();
-            let s = test(&l1, &l2);
-            st = s;
+            if tweaking {
+                test_ai = best_ai.create_layer_variant();
+            } else {
+                test_ai = best_ai.create_variant();
+            }
+            let s = test(&test_ai, |_,_,_| ());
             if s < score {
                 draw_text(&format!("Score was better: {}", s), 10., 260., 20., WHITE);
                 //println!("Score was better: {}", s);
-                layer1 = l1;
-                layer2 = l2;
+                best_ai = test_ai.clone();
                 score = s;
             } else {
                 draw_text(&format!("Score was worse: {}", s), 10., 260., 20., WHITE);
@@ -124,13 +88,23 @@ async fn main() {
             }
         }
 
+        if is_key_pressed(KeyCode::B) {
+            println!("best ai: {}", best_ai)
+        }
         if is_key_down(KeyCode::B) {
-            let r = test_render(&layer1, &layer2);
+            let r = test(&best_ai, |x, y, result| {
+                let colors = [GRAY, RED, PURPLE, YELLOW, GREEN];
+                draw_circle(x * 50., y * 50., 2., colors[result]);
+            });
             draw_text(&format!("Best score: {}\n", r), 10., 275., 20., WHITE);
         } else {
-            let r = test_render(&t1, &t2);
+            let r = test(&test_ai, |x, y, result| {
+                let colors = [GRAY, RED, PURPLE, YELLOW, GREEN];
+                draw_circle(x * 50., y * 50., 2., colors[result]);
+            });
             draw_text(&format!("Test score: {}\n", r), 10., 275., 20., WHITE);
         }
+        draw_text(&format!("Tweaking: {}", tweaking), 10., 290., 20.0, WHITE);
         
         if is_key_down(KeyCode::Escape) {
             break;
@@ -138,6 +112,6 @@ async fn main() {
 
         next_frame().await
     }
-    println!("Final matricies:\n{}\n{}", layer1, layer2);
+    println!("Final ai:\n{}", best_ai);
     println!("Final score: {}", score);
 }

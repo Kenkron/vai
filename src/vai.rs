@@ -1,6 +1,20 @@
+use std::fmt::Display;
+
 use nalgebra as na;
-use nalgebra::Dim;
 use rand;
+
+pub fn create_variant<const R: usize, const C: usize>(original: &na::SMatrix<f32, R, C>)
+-> na::SMatrix<f32, R, C> {
+    // Adding two variances increases the odds of small changes,
+    // but also makes larger infrequent changes possible
+    let mut variance = na::SMatrix::<f32, R, C>::new_random().add_scalar(-0.5);
+    variance += na::SMatrix::<f32, R, C>::new_random().add_scalar(-0.5);
+    return original + variance;
+}
+
+fn rand_index(len: usize) -> usize {
+    (rand::random::<f32>() * (len + 1) as f32).floor() as usize
+}
 
 #[derive(Clone)]
 pub struct VAI<const I: usize, const O: usize, const HIDDEN_LAYERS: usize> {
@@ -8,14 +22,15 @@ pub struct VAI<const I: usize, const O: usize, const HIDDEN_LAYERS: usize> {
     end_layer: na::SMatrix::<f32, O, I>
 }
 
-pub fn create_variant<const R: usize, const C: usize>(original: &na::SMatrix<f32, R, C>)
--> na::SMatrix<f32, R, C> {
-    let result = original.clone();
-    return result;
-}
-
-fn rand_index(len: usize) -> usize {
-    (rand::random::<f32>() * (len + 1) as f32).floor() as usize
+impl<const I: usize, const O: usize, const HIDDEN_LAYERS: usize> Display for VAI<I, O, HIDDEN_LAYERS> {
+    fn fmt(&self,f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut result = String::new();
+        for mat in &self.hidden_layers {
+            result += mat.to_string().as_str();
+        }
+        result += self.end_layer.to_string().as_str();
+        write!(f, "{}", result)
+    }
 }
 
 impl<const I: usize, const O: usize, const HIDDEN_LAYERS: usize> VAI<I, O, HIDDEN_LAYERS> {
@@ -25,16 +40,16 @@ impl<const I: usize, const O: usize, const HIDDEN_LAYERS: usize> VAI<I, O, HIDDE
             end_layer: na::SMatrix::<f32, O, I>::identity()
         }
     }
-    pub fn create_variant(original: &Self) -> Self {
-        let mut result = original.clone();
+    pub fn create_variant(&self) -> Self {
+        let mut result = self.clone();
         for mat in &mut result.hidden_layers {
             *mat = create_variant(&mat);
         }
         result.end_layer = create_variant(&result.end_layer);
         return result;
     }
-    pub fn create_layer_variant(original: &Self) -> Self {
-        let mut result = original.clone();
+    pub fn create_layer_variant(&self) -> Self {
+        let mut result = self.clone();
         let hidden_layers = &mut result.hidden_layers;
         let layer = rand_index(hidden_layers.len() + 1);
         if layer < hidden_layers.len() {
