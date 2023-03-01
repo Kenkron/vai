@@ -7,9 +7,16 @@ pub fn create_variant<const R: usize, const C: usize>(original: &na::SMatrix<f32
 -> na::SMatrix<f32, R, C> {
     // Adding two variances increases the odds of small changes,
     // but also makes larger infrequent changes possible
-    let mut variance = na::SMatrix::<f32, R, C>::new_random().add_scalar(-0.5);
-    variance += na::SMatrix::<f32, R, C>::new_random().add_scalar(-0.5);
+    let mut variance = na::SMatrix::<f32, R, C>::new_random();
+    variance.apply(|x| *x = infinite_map(*x));
     return original + variance.scale(intensity);
+}
+
+/**Maps a 0-1 valud to +- infinity, with low weighted extremes
+ */
+pub fn infinite_map(input: f32) -> f32 {
+    let x = input - 0.5;
+    return x/(0.25 - x*x).sqrt();
 }
 
 fn rand_index(len: usize) -> usize {
