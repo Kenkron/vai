@@ -3,13 +3,13 @@ use std::fmt::Display;
 use nalgebra as na;
 use rand;
 
-pub fn create_variant<const R: usize, const C: usize>(original: &na::SMatrix<f32, R, C>)
+pub fn create_variant<const R: usize, const C: usize>(original: &na::SMatrix<f32, R, C>, intensity: f32)
 -> na::SMatrix<f32, R, C> {
     // Adding two variances increases the odds of small changes,
     // but also makes larger infrequent changes possible
     let mut variance = na::SMatrix::<f32, R, C>::new_random().add_scalar(-0.5);
     variance += na::SMatrix::<f32, R, C>::new_random().add_scalar(-0.5);
-    return original + variance;
+    return original + variance.scale(intensity);
 }
 
 fn rand_index(len: usize) -> usize {
@@ -36,26 +36,27 @@ impl<const I: usize, const O: usize, const HIDDEN_LAYERS: usize> Display for VAI
 impl<const I: usize, const O: usize, const HIDDEN_LAYERS: usize> VAI<I, O, HIDDEN_LAYERS> {
     pub fn new() -> Self {
         Self {
-            hidden_layers: [na::SMatrix::<f32, I, I>::identity(); HIDDEN_LAYERS],
-            end_layer: na::SMatrix::<f32, O, I>::identity()
+            hidden_layers: [na::SMatrix::<f32, I, I>::zeros(); HIDDEN_LAYERS],
+            end_layer: na::SMatrix::<f32, O, I>::zeros()
         }
     }
-    pub fn create_variant(&self) -> Self {
+    pub fn create_variant(&self, intensity: f32) -> Self {
         let mut result = self.clone();
+        let s_intensity = intensity/(1.0 + result.hidden_layers.len() as f32);
         for mat in &mut result.hidden_layers {
-            *mat = create_variant(&mat);
+            *mat = create_variant(&mat, s_intensity);
         }
-        result.end_layer = create_variant(&result.end_layer);
+        result.end_layer = create_variant(&result.end_layer, s_intensity);
         return result;
     }
-    pub fn create_layer_variant(&self) -> Self {
+    pub fn create_layer_variant(&self, intensity: f32) -> Self {
         let mut result = self.clone();
         let hidden_layers = &mut result.hidden_layers;
         let layer = rand_index(hidden_layers.len() + 1);
         if layer < hidden_layers.len() {
-            hidden_layers[layer] = create_variant(&hidden_layers[layer]);
+            hidden_layers[layer] = create_variant(&hidden_layers[layer], intensity);
         } else {
-            result.end_layer = create_variant(&result.end_layer);
+            result.end_layer = create_variant(&result.end_layer, intensity);
         }
         return result;
     }
