@@ -11,18 +11,18 @@ fn outside(x: f32, y: f32) -> f32 {
     // Overlap of two circles
     // x, y, r
     let c1 = (0.2, 0.3, 0.1);
-    let c2 = (0.6, 0.7, 0.2);
+    let c2 = (0.6, 0.6, 0.2);
     // distsq
     let d1 = (c1.0 - x) * (c1.0 - x) + (c1.1 - y) * (c1.1 - y);
     let d2 = (c2.0 - x) * (c2.0 - x) + (c2.1 - y) * (c2.1 - y);
     // weight
     let w1 = relu(d1 - c1.2 * c1.2);
     let w2 = relu(d2 - c2.2 * c2.2);
-    return (w1) * (w2);
+    return  w2;
 }
 
-fn test<const I: usize, const C: usize>(
-    ai: &vai::VAI<I,1,C>,
+fn test<const I: usize, const C: usize, const E: usize>(
+    ai: &vai::VAI<I, 1, C, E>,
     debug: impl Fn(f32, f32, usize) -> ())
 -> f32{
     let mut outer = 0.0;
@@ -77,7 +77,7 @@ fn test<const I: usize, const C: usize>(
 #[macroquad::main("World's Worst AI")]
 async fn main() {
 
-    let mut best_ai = vai::VAI::<8, 1, 2>::new();
+    let mut best_ai = vai::VAI::<3, 1, 8, 1>::new();
     //best_ai = best_ai.create_variant(1.0);
     let mut score = test(&best_ai, |_,_,_| ());
 
