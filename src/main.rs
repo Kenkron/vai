@@ -10,8 +10,8 @@ fn relu(x: f32) -> f32 {
 fn outside(x: f32, y: f32) -> f32 {
     // Overlap of two circles
     // x, y, r
-    let c1 = (0.0, 0.0, 0.2);
-    let c2 = (1.0, 1.0, 0.2);
+    let c1 = (0.2, 0.3, 0.1);
+    let c2 = (0.6, 0.7, 0.2);
     // distsq
     let d1 = (c1.0 - x) * (c1.0 - x) + (c1.1 - y) * (c1.1 - y);
     let d2 = (c2.0 - x) * (c2.0 - x) + (c2.1 - y) * (c2.1 - y);

@@ -15,6 +15,9 @@ pub fn create_variant<const R: usize, const C: usize>(original: &na::SMatrix<f32
 /**Maps a 0-1 valud to +- infinity, with low weighted extremes
  */
 pub fn infinite_map(input: f32) -> f32 {
+    if input <= 0. || input >= 1. {
+        return 0.;
+    }
     let x = input - 0.5;
     return x/(0.25 - x*x).sqrt();
 }
