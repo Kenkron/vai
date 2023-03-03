@@ -5,7 +5,8 @@ use rayon::prelude::*;
 use rand::{self, Rng, SeedableRng};
 use rand::rngs::StdRng;
 use macroquad::{text::draw_text, shapes::draw_circle, window::next_frame};
-use macroquad::prelude::{is_key_pressed, KeyCode, is_key_down, GRAY, RED, PURPLE, YELLOW, GREEN, WHITE};
+use macroquad::prelude::{is_key_pressed, KeyCode, is_key_down, Conf};
+use macroquad::prelude::{GRAY, RED, PURPLE, YELLOW, GREEN, WHITE};
 use nalgebra as na;
 
 fn relu(x: f32) -> f32 {
@@ -87,7 +88,17 @@ fn test<const I: usize, const C: usize, const E: usize>(
     return (inner_cost + outer_cost) * 0.5;
 }
 
-#[macroquad::main("World's Worst AI")]
+fn window_conf() -> Conf {
+    Conf {
+        window_title: "World's Worst AI".to_owned(),
+        fullscreen: false,
+        window_width: 250,
+        window_height: 350,
+        ..Default::default()
+    }
+}
+
+#[macroquad::main(window_conf)]
 async fn main() {
     let mut rng = StdRng::seed_from_u64(0);
 
@@ -106,6 +117,9 @@ async fn main() {
     let mut quiet = false;
     let mut show_best = true;
     loop {
+        if is_key_pressed(KeyCode::Escape) {
+            break;
+        }
         if is_key_pressed(KeyCode::T) {
             tweaking = !tweaking;
         }
@@ -115,8 +129,17 @@ async fn main() {
         if is_key_pressed(KeyCode::Space) {
             paused = !paused;
         }
+        if is_key_pressed(KeyCode::P) {
+            println!("best ai: {}", best_ai)
+        }
+        if is_key_pressed(KeyCode::Q) {
+            quiet = !quiet;
+        }
+        if is_key_pressed(KeyCode::B) {
+            show_best = !show_best;
+        }
         rng = StdRng::seed_from_u64(generation);
-        for _ in 0..8 {
+        for _ in 0..16 {
             if step || !paused {
                 step = false;
                 generation += 1;
@@ -139,15 +162,6 @@ async fn main() {
                 }
             }
         }
-        if is_key_pressed(KeyCode::P) {
-            println!("best ai: {}", best_ai)
-        }
-        if is_key_pressed(KeyCode::Q) {
-            quiet = !quiet;
-        }
-        if is_key_pressed(KeyCode::B) {
-            show_best = !show_best;
-        }
         if !quiet {
             if show_best {
                 let r = test(&best_ai, &mut rng,  |x, y, result| {
@@ -165,9 +179,6 @@ async fn main() {
             draw_text(&format!("Tweaking: {}", tweaking), 10., 305., 20.0, WHITE);
         }
         draw_text(&format!("Generation: {}", generation), 10., 290., 20.0, WHITE);
-        if is_key_down(KeyCode::Escape) {
-            break;
-        }
         if is_key_pressed(KeyCode::S) {
             match std::fs::File::create("./save.vai") {
                 Ok(mut file) => {
