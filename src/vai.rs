@@ -1,8 +1,20 @@
-use std::fmt::Display;
+use std::{fmt::Display, fs::File};
+use std::io::{Write, self, Lines};
 
+use na::SMatrix;
 use nalgebra as na;
 use rand;
 
+/**Maps a 0-1 valud to +- infinity, with low weighted extremes*/
+pub fn infinite_map(input: f32) -> f32 {
+    if input <= 0. || input >= 1. {
+        return 0.;
+    }
+    let x = input - 0.5;
+    return 0.5 * x/(0.25 - x*x).sqrt();
+}
+
+/**Creates a random variation of a matrix*/
 pub fn create_variant<const R: usize, const C: usize>(original: &na::SMatrix<f32, R, C>, intensity: f32)
 -> na::SMatrix<f32, R, C> {
     // Adding two variances increases the odds of small changes,
@@ -12,17 +24,63 @@ pub fn create_variant<const R: usize, const C: usize>(original: &na::SMatrix<f32
     return original + variance.scale(intensity);
 }
 
-/**Maps a 0-1 valud to +- infinity, with low weighted extremes*/
-pub fn infinite_map(input: f32) -> f32 {
-    if input <= 0. || input >= 1. {
-        return 0.;
-    }
-    let x = input - 0.5;
-    return x/(0.25 - x*x).sqrt();
-}
-
 fn rand_index(len: usize) -> usize {
     (rand::random::<f32>() * (len + 1) as f32).floor() as usize
+}
+
+pub fn write_matrix<const R: usize, const C: usize>(
+    matrix: &SMatrix<f32, R, C>,
+    file: &mut File)
+-> std::io::Result<()> {
+    for r in 0..R {
+        let row = matrix.row(r);
+        for c in 0..C {
+            write!(file, "{} ", row.get(c).unwrap())?;
+        }
+        writeln!(file, "")?;
+    }
+    writeln!(file, "")?;
+    return Ok(());
+}
+
+pub fn read_matrix<const R: usize, const C: usize>(
+    lines: &mut Lines<std::io::BufReader<File>>)
+-> std::io::Result<SMatrix<f32, R, C>> {
+    let mut result = SMatrix::<f32, R, C>::zeros();
+    let mut r = 0;
+    for line in lines {
+        let line = line?;
+        let vals: Vec<&str> = line.split_whitespace().collect();
+        if vals.len() == 0 {
+            // skip empty lines
+            continue;
+        }
+        if vals.len() != C {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Wrong number of columns"));
+        }
+        for c in 0..vals.len() {
+            result.row_mut(r)[c] = match vals[c].parse() {
+                Ok(x) => {x},
+                Err(_) => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "Invalid number"));
+                },
+            };
+        }
+        r += 1;
+        if r == R {
+            break;
+        }
+    }
+    if r != R {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Wrong number of rows"));
+    }
+    return Ok(result);
 }
 
 /**A Very Artificial Intelligence.
@@ -63,7 +121,8 @@ VAI<I, O, C, EXTRA_LAYERS> {
     }
     pub fn create_variant(&self, intensity: f32) -> Self {
         let mut result = self.clone();
-        let s_intensity = intensity/(1.0 + result.extra_hidden_layers.len() as f32);
+        let fields = I * C + C * C * EXTRA_LAYERS + C * O;
+        let s_intensity = intensity/(1.0 + fields as f32);
         result.input_layer = create_variant(&result.input_layer, intensity);
         for mat in &mut result.extra_hidden_layers {
             *mat = create_variant(&mat, s_intensity);
@@ -76,11 +135,14 @@ VAI<I, O, C, EXTRA_LAYERS> {
         let extra_hidden_layers = &mut result.extra_hidden_layers;
         let layer = rand_index(extra_hidden_layers.len() + 2);
         if layer < extra_hidden_layers.len() {
-            extra_hidden_layers[layer] = create_variant(&extra_hidden_layers[layer], intensity);
+            let fields = C * C;
+            extra_hidden_layers[layer] = create_variant(&extra_hidden_layers[layer], intensity/fields as f32);
         } else if layer == extra_hidden_layers.len() {
-            result.input_layer = create_variant(&result.input_layer, intensity);
+            let fields = I * C;
+            result.input_layer = create_variant(&result.input_layer, intensity/fields as f32);
         } else {
-            result.output_layer = create_variant(&result.output_layer, intensity);
+            let fields = C * O;
+            result.output_layer = create_variant(&result.output_layer, intensity/fields as f32);
         } 
         return result;
     }
@@ -94,5 +156,22 @@ VAI<I, O, C, EXTRA_LAYERS> {
             intermediate.apply(|x| *x = x.max(0.));
         }
         return self.output_layer * intermediate;
+    }
+    pub fn read(lines: &mut Lines<std::io::BufReader<File>>) -> std::io::Result<Self> {
+        let mut result = Self::new();
+        result.input_layer = read_matrix(lines)?;
+        for matrix in &mut result.extra_hidden_layers {
+            *matrix = read_matrix(lines)?;
+        }
+        result.output_layer = read_matrix(lines)?;
+        return Ok(result);
+    }
+    pub fn write(&self, file: &mut File) -> std::io::Result<()> {
+        write_matrix(&self.input_layer, file)?;
+        for matrix in &self.extra_hidden_layers {
+            write_matrix(matrix, file)?;
+        }
+        write_matrix(&self.output_layer, file)?;
+        return Ok(());
     }
 }

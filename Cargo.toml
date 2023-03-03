@@ -10,3 +10,4 @@ glm = "0.2.3"
 macroquad = "0.3.25"
 nalgebra = { version = "0.32.1", features = ["rand"] }
 rand = "0.8.5"
+rayon = "1.6.1"
