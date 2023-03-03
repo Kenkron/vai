@@ -45,7 +45,7 @@ There are a number of controls:
 
 * Escape: exit
 * Space: start/pause the training
-* Ender: when paused, run a single training step
+* Enter: when paused, run a single training step
 * Q: turn off/on the visualization
 * B: toggle between showing the best ai, and the most recently tested ai
 * P: print out the current ai
