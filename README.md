@@ -14,7 +14,7 @@ A primitive implementation of a neural network.
  * Statically defined, arbitrary number of:
    * Input nodes (make sure one of them is a constant for bias)
    * Output nodes
-   * Hidden layers (min of 1)
+   * Hidden layers (minimum of 1)
    * Hidden layer size (all hidden layers are the same size)
  * Uses ReLu for non-linear behaviour
  * Writing / Reading convinience functions

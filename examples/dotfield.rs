@@ -7,7 +7,6 @@ use rand::rngs::StdRng;
 use macroquad::{text::draw_text, shapes::draw_circle, window::next_frame};
 use macroquad::prelude::{is_key_pressed, KeyCode, is_key_down, GRAY, RED, PURPLE, YELLOW, GREEN, WHITE};
 use nalgebra as na;
-mod vai;
 
 fn relu(x: f32) -> f32 {
     return x.max(0.);

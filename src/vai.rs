@@ -1,9 +1,9 @@
 use std::{fmt::Display, fs::File};
 use std::io::{Write, self, Lines};
 
-use nalgebra as na;
+extern crate nalgebra as na;
 use na::SMatrix;
-use rand;
+extern crate rand;
 
 /// Maps a 0-1 valud to +- infinity, with low weighted extremes
 pub fn infinite_map(input: f32) -> f32 {
