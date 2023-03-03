@@ -1,5 +1,7 @@
 use std::io::BufRead;
+use std::sync::{Arc, Mutex};
 
+use rayon::prelude::*;
 use rand::{self, Rng, SeedableRng};
 use rand::rngs::StdRng;
 use macroquad::{text::draw_text, shapes::draw_circle, window::next_frame};
@@ -28,16 +30,24 @@ fn outside(x: f32, y: f32) -> f32 {
 fn test<const I: usize, const C: usize, const E: usize>(
     ai: &vai::VAI<I, 1, C, E>,
     random: &mut crate::rand::rngs::StdRng,
-    debug: impl Fn(f32, f32, usize) -> ())
+    debug: impl Send + Fn(f32, f32, usize) -> ())
 -> f32{
-    let mut outer = 0.0;
-    let mut miss_outer = 0.0;
-    let mut inner = 0.0;
-    let mut miss_inner = 0.0;
     let tests = 1000;
-    for _ in 0..tests {
-        let x = random.gen();
-        let y = random.gen();
+    let random_lock = Arc::new(Mutex::new(random));
+    let debug_lock = Arc::new(Mutex::new(debug));
+    let outer = Arc::new(Mutex::new(0.));
+    let miss_outer = Arc::new(Mutex::new(0.));
+    let inner = Arc::new(Mutex::new(0.));
+    let miss_inner = Arc::new(Mutex::new(0.));
+    (0..tests).into_par_iter().for_each(|i| {
+
+        let x:f32;
+        let y:f32;
+        {
+            let mut random = random_lock.lock().unwrap();
+            x = random.gen();
+            y = random.gen();
+        }
         let mut input = na::SMatrix::<f32, I, 1>::zeros();
         input[0] = 1.0;
         input[1] = x;
@@ -47,32 +57,32 @@ fn test<const I: usize, const C: usize, const E: usize>(
         let actual = outside(x, y);
         let path:usize;
         if actual > 0. {
-            outer += 1.;
+            *outer.lock().unwrap() += 1.;
             if !(out > 0.) {
                 path = 1;
-                miss_outer += 1.;
+                *miss_outer.lock().unwrap() += 1.;
             } else {
                 path = 2;
             }
         } else {
-            inner += 1.;
+            *inner.lock().unwrap() += 1.;
             if out > 0. {
                 path = 3;
-                miss_inner += 1.;
+                *miss_inner.lock().unwrap() += 1.;
             } else {
                 path = 4;
             }
         }
-        debug(x, y, path);
-    }
+        debug_lock.lock().unwrap()(x, y, path);
+    });
     let mut outer_cost = 0.;
-    if outer > 0. {
-        outer_cost = miss_outer/outer;
+    if *outer.lock().unwrap() > 0. {
+        outer_cost = *miss_outer.lock().unwrap()/ *outer.lock().unwrap();
         outer_cost *= outer_cost;
     }
     let mut inner_cost = 0.;
-    if inner > 0. {
-        inner_cost = miss_inner/inner;
+    if *inner.lock().unwrap() > 0. {
+        inner_cost = *miss_inner.lock().unwrap() / *inner.lock().unwrap();
         inner_cost *= inner_cost;
     }
     return (inner_cost + outer_cost) * 0.5;
@@ -106,25 +116,27 @@ async fn main() {
             paused = !paused;
         }
         rng = StdRng::seed_from_u64(generation);
-        if step || !paused {
-            step = false;
-            generation += 1;
-            // Some mutations will be big, some small
-            if tweaking {
-                test_ai = best_ai.create_layer_variant(rand::random::<f32>());
-            } else {
-                test_ai = best_ai.create_variant(rand::random::<f32>());
-            }
-            let s = test(&test_ai, &mut rng, |_,_,_| ());
-            let re_check = test(&best_ai, &mut rng, |_,_,_| ());
-            // Constantly update best score based on new data
-            score = (score + re_check) * 0.5;
-            if s < score {
-                //draw_text(&format!("Score was better: {}", s), 10., 260., 20., WHITE);
-                best_ai = test_ai.clone();
-                score = s;
-            } else {
-                //draw_text(&format!("Score was worse: {}", s), 10., 260., 20., WHITE);
+        for _ in 0..8 {
+            if step || !paused {
+                step = false;
+                generation += 1;
+                // Some mutations will be big, some small
+                if tweaking {
+                    test_ai = best_ai.create_layer_variant(rand::random::<f32>());
+                } else {
+                    test_ai = best_ai.create_variant(rand::random::<f32>());
+                }
+                let s = test(&test_ai, &mut rng, |_,_,_| ());
+                let re_check = test(&best_ai, &mut rng, |_,_,_| ());
+                // Constantly update best score based on new data
+                score = (score + re_check) * 0.5;
+                if s < score {
+                    //draw_text(&format!("Score was better: {}", s), 10., 260., 20., WHITE);
+                    best_ai = test_ai.clone();
+                    score = s;
+                } else {
+                    //draw_text(&format!("Score was worse: {}", s), 10., 260., 20., WHITE);
+                }
             }
         }
         if is_key_pressed(KeyCode::P) {
