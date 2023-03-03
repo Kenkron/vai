@@ -1,11 +1,11 @@
 use std::{fmt::Display, fs::File};
 use std::io::{Write, self, Lines};
 
-use na::SMatrix;
 use nalgebra as na;
+use na::SMatrix;
 use rand;
 
-/**Maps a 0-1 valud to +- infinity, with low weighted extremes*/
+/// Maps a 0-1 valud to +- infinity, with low weighted extremes
 pub fn infinite_map(input: f32) -> f32 {
     if input <= 0. || input >= 1. {
         return 0.;
@@ -14,7 +14,12 @@ pub fn infinite_map(input: f32) -> f32 {
     return 0.5 * x/(0.25 - x*x).sqrt();
 }
 
-/**Creates a random variation of a matrix*/
+/// Creates a random variation of a matrix
+/// * original - The matrix that will be varied
+/// * intensity - The severity to which the matrix will be randomized.
+/// 
+/// Intensity affects the random distribution to favor smaller values, but the
+/// resulting matrix can still be changed by an arbitrary amount.
 pub fn create_variant<const R: usize, const C: usize>(original: &na::SMatrix<f32, R, C>, intensity: f32)
 -> na::SMatrix<f32, R, C> {
     // Adding two variances increases the odds of small changes,
@@ -24,10 +29,15 @@ pub fn create_variant<const R: usize, const C: usize>(original: &na::SMatrix<f32
     return original + variance.scale(intensity);
 }
 
+/// Gets a random index less than the provided length
 fn rand_index(len: usize) -> usize {
     (rand::random::<f32>() * (len + 1) as f32).floor() as usize
 }
 
+/// Writes a matrix to a file with space-delimited columns,
+/// newline delimited rows, and a trailing newline.
+/// * matrix - The matrix to write
+/// * file - The file to write to
 pub fn write_matrix<const R: usize, const C: usize>(
     matrix: &SMatrix<f32, R, C>,
     file: &mut File)
@@ -43,6 +53,10 @@ pub fn write_matrix<const R: usize, const C: usize>(
     return Ok(());
 }
 
+/// Reads a matrix from lines of a file with space-delimited columns,
+/// and newline delimited rows. Empty (whitespace) lines are ignored.
+/// * lines - A line iterator from which to read the matrix
+/// (generally provided by BufReader::new(file).lines())
 pub fn read_matrix<const R: usize, const C: usize>(
     lines: &mut Lines<std::io::BufReader<File>>)
 -> std::io::Result<SMatrix<f32, R, C>> {
@@ -52,8 +66,7 @@ pub fn read_matrix<const R: usize, const C: usize>(
         let line = line?;
         let vals: Vec<&str> = line.split_whitespace().collect();
         if vals.len() == 0 {
-            // skip empty lines
-            continue;
+            continue; // Skip empty lines
         }
         if vals.len() != C {
             return Err(io::Error::new(
@@ -83,95 +96,159 @@ pub fn read_matrix<const R: usize, const C: usize>(
     return Ok(result);
 }
 
-/**A Very Artificial Intelligence.
- * I: Number of inputs. You should probably include a constant bias.
- * O: Number of outputs
- * C: Complexity of (number of nodes in) hidden layers
- * EXTRA_LAYERS: There is always at least one hidden layer. This number adds more.
- */
+/// Very Artificial Intelligence.
+/// * I: Number of inputs. You should probably include a constant bias.
+/// * O: Number of outputs
+/// * C: Complexity of (number of nodes in) hidden layers
+/// * EXTRA_LAYERS: There is always at least one hidden layer. This number adds more.
 #[derive(Clone)]
 pub struct
-VAI<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize> {
-    input_layer: na::SMatrix::<f32, C, I>,
-    extra_hidden_layers: [na::SMatrix::<f32, C, C>; EXTRA_LAYERS],
-    output_layer: na::SMatrix::<f32, O, C>
+VAI<
+    const I: usize,
+    const O: usize,
+    const C: usize,
+    const EXTRA_LAYERS: usize>
+{
+    input_connections: na::SMatrix::<f32, C, I>,
+    hidden_connections: [na::SMatrix::<f32, C, C>; EXTRA_LAYERS],
+    output_connections: na::SMatrix::<f32, O, C>
 }
 
-impl<const I: usize, const O: usize, const HIDDEN_LAYERS: usize, const LAYER_SIZE: usize>
+impl<
+    const I: usize,
+    const O: usize,
+    const HIDDEN_LAYERS: usize,
+    const LAYER_SIZE: usize>
 Display for VAI<I, O, HIDDEN_LAYERS, LAYER_SIZE> {
+    /// Concatenates the string representations of the input,
+    /// hidden layer, and output matricies.
     fn fmt(&self,f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut result = String::new();
-        result += self.input_layer.to_string().as_str();
-        for mat in &self.extra_hidden_layers {
-            result += mat.to_string().as_str();
+        write!(f, "{}", self.input_connections)?;
+        for mat in &self.hidden_connections {
+            write!(f, "{}", mat)?;
         }
-        result += self.output_layer.to_string().as_str();
-        write!(f, "{}", result)
+        write!(f, "{}", self.output_connections)
     }
 }
 
-impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
+impl<
+    const I: usize,
+    const O: usize,
+    const C: usize,
+    const EXTRA_LAYERS: usize>
 VAI<I, O, C, EXTRA_LAYERS> {
+    /// Creates a VAI with zeros for all connection weights
     pub fn new() -> Self {
         Self {
-            input_layer: na::SMatrix::<f32, C, I>::zeros(),
-            extra_hidden_layers: [na::SMatrix::<f32, C, C>::zeros(); EXTRA_LAYERS],
-            output_layer: na::SMatrix::<f32, O, C>::zeros()
+            input_connections: na::SMatrix::<f32, C, I>::zeros(),
+            hidden_connections: [na::SMatrix::<f32, C, C>::zeros(); EXTRA_LAYERS],
+            output_connections: na::SMatrix::<f32, O, C>::zeros()
         }
     }
+
+    /// Creates a random variant of this VAI
+    /// * intensity - Scaler for the added randomness
+    /// 
+    /// Intensity affects the random distribution to favor low magnitude
+    /// values, but the result can still be changed by an arbitrary amount.
+    /// Randomness is applied to each weight of each connection.
+    /// 
+    /// In order to keep variation fairly consistent on neural networks
+    /// of various sizes, the intensity is scaled down by the number of
+    /// connections in the network before being applied.
+    /// 
+    /// see also:
+    ///  * [`create_variant`]
+    ///  * [`VAI::create_layer_variant`]
     pub fn create_variant(&self, intensity: f32) -> Self {
         let mut result = self.clone();
         let fields = I * C + C * C * EXTRA_LAYERS + C * O;
         let s_intensity = intensity/(1.0 + fields as f32);
-        result.input_layer = create_variant(&result.input_layer, intensity);
-        for mat in &mut result.extra_hidden_layers {
+        result.input_connections =
+            create_variant(&result.input_connections, intensity);
+        for mat in &mut result.hidden_connections {
             *mat = create_variant(&mat, s_intensity);
         }
-        result.output_layer = create_variant(&result.output_layer, s_intensity);
+        result.output_connections =
+            create_variant(&result.output_connections, s_intensity);
         return result;
     }
+
+    /// Creates a random variant of this VAI that only changes one layer
+    /// * intensity - Scaler for the added randomness
+    /// 
+    /// Intensity affects the random distribution to favor low magnitude
+    /// values, but the result can still be changed by an arbitrary amount.
+    /// Randomness is applied to each weight of each connection on a randomly
+    /// chosen layer.
+    /// 
+    /// In order to keep variation fairly consistent on neural networks
+    /// of various sizes, the intensity is scaled down by the number of
+    /// connections in the chosen layer before being applied.
+    /// 
+    /// see also:
+    ///  * [`create_variant`]
+    ///  * [`VAI::create_variant`]
     pub fn create_layer_variant(&self, intensity: f32) -> Self {
         let mut result = self.clone();
-        let extra_hidden_layers = &mut result.extra_hidden_layers;
-        let layer = rand_index(extra_hidden_layers.len() + 2);
-        if layer < extra_hidden_layers.len() {
-            let fields = C * C;
-            extra_hidden_layers[layer] = create_variant(&extra_hidden_layers[layer], intensity/fields as f32);
-        } else if layer == extra_hidden_layers.len() {
-            let fields = I * C;
-            result.input_layer = create_variant(&result.input_layer, intensity/fields as f32);
+        let hidden_connections = &mut result.hidden_connections;
+        let layer = rand_index(hidden_connections.len() + 2);
+        if layer < hidden_connections.len() {
+            let original = &hidden_connections[layer];
+            let intensity = intensity/(C * C + 1) as f32;
+            hidden_connections[layer] = create_variant(original,intensity);
+        } else if layer == hidden_connections.len() {
+            let original = &result.input_connections;
+            let intensity = intensity/(I * C + 1) as f32;
+            result.input_connections = create_variant(original, intensity);
         } else {
-            let fields = C * O;
-            result.output_layer = create_variant(&result.output_layer, intensity/fields as f32);
+            let original = &result.output_connections;
+            let intensity = intensity/(C * O + 1) as f32;
+            result.output_connections = create_variant(original, intensity);
         } 
         return result;
     }
-    pub fn process(&self, inputs: &na::SMatrix<f32, I, 1>) -> na::SMatrix<f32, O, 1> {
-        let mut intermediate = self.input_layer * inputs;
+
+    /// Runs an input matrix through the neural network to get an output
+    /// * inputs - The inputs. One of them should be a constant for a bias.
+    pub fn process(&self, inputs: &na::SMatrix<f32, I, 1>)
+    -> na::SMatrix<f32, O, 1> {
+        let mut intermediate = self.input_connections * inputs;
         // Apply relu
         intermediate.apply(|x| *x = x.max(0.));
-        for mat in &self.extra_hidden_layers {
+        for mat in &self.hidden_connections {
             intermediate = mat * intermediate;
             // Apply relu
             intermediate.apply(|x| *x = x.max(0.));
         }
-        return self.output_layer * intermediate;
+        return self.output_connections * intermediate;
     }
-    pub fn read(lines: &mut Lines<std::io::BufReader<File>>) -> std::io::Result<Self> {
-        let mut result = Self::new();
-        result.input_layer = read_matrix(lines)?;
-        for matrix in &mut result.extra_hidden_layers {
-            *matrix = read_matrix(lines)?;
-        }
-        result.output_layer = read_matrix(lines)?;
-        return Ok(result);
-    }
+    
+    /// Writes a vai to a file, writing its input, hidden, and output
+    /// connections in order, as written by [`write_matrix`]
+    /// * lines - A line iterator from which to read the vai
+    /// (generally provided by BufReader::new(file).lines())
     pub fn write(&self, file: &mut File) -> std::io::Result<()> {
-        write_matrix(&self.input_layer, file)?;
-        for matrix in &self.extra_hidden_layers {
+        write_matrix(&self.input_connections, file)?;
+        for matrix in &self.hidden_connections {
             write_matrix(matrix, file)?;
         }
-        write_matrix(&self.output_layer, file)?;
+        write_matrix(&self.output_connections, file)?;
         return Ok(());
+    }
+
+    /// Reads a matrix from lines of a file containing its input, hidden, and
+    /// output connections in order, as read by [`read_matrix`]
+    /// * lines - A line iterator from which to read the vai
+    /// (generally provided by BufReader::new(file).lines())
+    pub fn read(lines: &mut Lines<std::io::BufReader<File>>)
+    -> std::io::Result<Self> {
+        let mut result = Self::new();
+        result.input_connections = read_matrix(lines)?;
+        for matrix in &mut result.hidden_connections {
+            *matrix = read_matrix(lines)?;
+        }
+        result.output_connections = read_matrix(lines)?;
+        return Ok(result);
     }
 }

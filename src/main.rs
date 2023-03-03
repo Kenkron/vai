@@ -16,15 +16,15 @@ fn relu(x: f32) -> f32 {
 fn outside(x: f32, y: f32) -> f32 {
     // Overlap of two circles
     // x, y, r
-    //let c1 = (0.2, 0.3, 0.1);
+    let c1 = (0.2, 0.3, 0.1);
     let c2 = (0.6, 0.6, 0.2);
     // distsq
-    //let d1 = (c1.0 - x) * (c1.0 - x) + (c1.1 - y) * (c1.1 - y);
+    let d1 = (c1.0 - x) * (c1.0 - x) + (c1.1 - y) * (c1.1 - y);
     let d2 = (c2.0 - x) * (c2.0 - x) + (c2.1 - y) * (c2.1 - y);
     // weight
-    //let w1 = relu(d1 - c1.2 * c1.2);
+    let w1 = relu(d1 - c1.2 * c1.2);
     let w2 = relu(d2 - c2.2 * c2.2);
-    return  w2;
+    return  w1 * w2;
 }
 
 fn test<const I: usize, const C: usize, const E: usize>(
@@ -39,7 +39,7 @@ fn test<const I: usize, const C: usize, const E: usize>(
     let miss_outer = Arc::new(Mutex::new(0.));
     let inner = Arc::new(Mutex::new(0.));
     let miss_inner = Arc::new(Mutex::new(0.));
-    (0..tests).into_par_iter().for_each(|i| {
+    (0..tests).into_par_iter().for_each(|_| {
 
         let x:f32;
         let y:f32;
@@ -92,7 +92,7 @@ fn test<const I: usize, const C: usize, const E: usize>(
 async fn main() {
     let mut rng = StdRng::seed_from_u64(0);
 
-    let mut best_ai = vai::VAI::<3, 1, 8, 1>::new();
+    let mut best_ai = vai::VAI::<3, 1, 16, 1>::new();
     //best_ai = best_ai.create_variant(1.0);
     let mut score = test(&best_ai, &mut rng, |_,_,_| ());
 
@@ -100,11 +100,12 @@ async fn main() {
     println!("Starting score: {}", score);
 
     let mut test_ai = best_ai.clone();
-    let mut tweaking = true;
+    let mut tweaking = false;
     let mut generation = 0;
     let mut paused = true;
     let mut step = false;
     let mut quiet = false;
+    let mut show_best = true;
     loop {
         if is_key_pressed(KeyCode::T) {
             tweaking = !tweaking;
@@ -129,7 +130,7 @@ async fn main() {
                 let s = test(&test_ai, &mut rng, |_,_,_| ());
                 let re_check = test(&best_ai, &mut rng, |_,_,_| ());
                 // Constantly update best score based on new data
-                score = (score + re_check) * 0.5;
+                score = (score * 15. + re_check) * 0.0625;
                 if s < score {
                     //draw_text(&format!("Score was better: {}", s), 10., 260., 20., WHITE);
                     best_ai = test_ai.clone();
@@ -145,8 +146,11 @@ async fn main() {
         if is_key_pressed(KeyCode::Q) {
             quiet = !quiet;
         }
+        if is_key_pressed(KeyCode::B) {
+            show_best = !show_best;
+        }
         if !quiet {
-            if is_key_down(KeyCode::B) {
+            if show_best {
                 let r = test(&best_ai, &mut rng,  |x, y, result| {
                     let colors = [GRAY, RED, PURPLE, YELLOW, GREEN];
                     draw_circle(x * 250., y * 250., 2., colors[result]);
@@ -181,16 +185,17 @@ async fn main() {
         if is_key_pressed(KeyCode::O) {
             match std::fs::File::open("./save.vai") {
                 Ok(file) => {
-                    match vai::VAI::<3, 1, 8, 1>::read(
+                    match vai::VAI::<3, 1, 16, 1>::read(
                         &mut std::io::BufReader::new(file).lines()) {
                         Ok(result) => {
                             best_ai = result;
+                            score = test(&best_ai, &mut rng, |_,_,_| ());
                             println!("Loaded matrix");
                         },
                         Err(err) => {println!("Load Error: {}", err)},
                     };
                 },
-                Err(err) => {println!("Save Error: {}", err)},
+                Err(err) => {println!("Load Error: {}", err)},
             };
         }
 
