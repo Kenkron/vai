@@ -3,7 +3,7 @@ Very Artificial Intelligence
 
 A primitive implementation of a neural network.
 
-> VAI is a simple, fast implementation of a Deep Learning Neural Network
+> VAI is a simple implementation of a Deep Learning Neural Network
 > that supports an arbitrary number of input nodes, output nodes, hidden layers
 > and hidden neurons. It provides randomization functions for neuroevolution
 > with a distribution that favors modest changes, but will occasionally produce
