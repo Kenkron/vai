@@ -50,13 +50,14 @@ fn extract_pixels(texture: &Texture2D)
 
 fn score(test_number: usize, actual: &na::SMatrix<f32, 10, 1>)
 -> f32 {
-    let mut result = 0.0;
+    let number_val = actual[test_number];
+    let mut nth = 0.0;
     for i in 0..10 {
-        if (test_number == i) != (actual[i] > 0.0) {
-            result += 1.0;
+        if i != test_number && actual[i] >= number_val {
+            nth += 1.0;
         }
     }
-    return result;
+    return nth;
 }
 
 fn window_conf() -> Conf {
@@ -106,7 +107,7 @@ async fn main() {
                     test_ais[i].0 = best_ais[i % best_ais.len()].create_variant(intensity);
                 }
             }
-            let tests_per_generation = 200;
+            let tests_per_generation = 1000;
             for _ in 0..tests_per_generation {
                 test_number = create_random_render(render_target, &font);
                 inputs = extract_pixels(&render_target.texture);
@@ -148,7 +149,7 @@ async fn main() {
         for i in 0..best_tuple.len() {
             let mut color = ORANGE;
             if best_tuple[i].0 == test_number {
-                if best_tuple[i].1 > 0.0 {
+                if i == 0 {
                     color = GREEN;
                 } else {
                     color = RED;
