@@ -101,7 +101,7 @@ pub fn read_matrix<const R: usize, const C: usize>(
 /// * O: Number of outputs
 /// * C: Complexity of (number of nodes in) hidden layers
 /// * EXTRA_LAYERS: There is always at least one hidden layer. This number adds more.
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct
 VAI<
     const I: usize,
