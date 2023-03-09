@@ -20,7 +20,7 @@ fn create_random_render(render_target: RenderTarget, font: &Font)
     cam.render_target = Some(render_target);
     set_camera(&cam);
     clear_background(BLACK);
-    let min_font_size = 10.0;
+    let min_font_size = 12.0;
     let font_size = min_font_size + random::<f32>() * (IMAGE_SIZE as f32 - min_font_size);
     let wiggle = IMAGE_SIZE as f32 - font_size;
     let x =  random::<f32>() * wiggle;
@@ -99,7 +99,7 @@ async fn main() {
             generation += 1;
             step = false;
             // Tuple: (ai, score)
-            let mut test_ais = vec![(vai::VAI::<INPUTS,10,C,H>::new(), 0.0 as f32); 200];
+            let mut test_ais = vec![(vai::VAI::<INPUTS,10,C,H>::new(), 0.0 as f32); 100];
             for i in 0..test_ais.len() {
                 if i < best_ais.len() {
                     test_ais[i].0 = best_ais[i];
@@ -108,7 +108,7 @@ async fn main() {
                     test_ais[i].0 = best_ais[i % best_ais.len()].create_variant(intensity);
                 }
             }
-            let tests_per_generation = 2000;
+            let tests_per_generation = 500;
             for _ in 0..tests_per_generation {
                 test_number = create_random_render(render_target, &font);
                 inputs = extract_pixels(&render_target.texture);
