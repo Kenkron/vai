@@ -9,7 +9,7 @@ use macroquad::{text::draw_text, window::next_frame};
 use macroquad::prelude::*;
 use nalgebra as na;
 
-const IMAGE_SIZE: usize = 12;
+const IMAGE_SIZE: usize = 16;
 const PIXEL_COUNT: usize = IMAGE_SIZE * IMAGE_SIZE;
 const INPUTS: usize = PIXEL_COUNT + 1;
 
@@ -20,16 +20,17 @@ fn create_random_render(render_target: RenderTarget, font: &Font)
     cam.render_target = Some(render_target);
     set_camera(&cam);
     clear_background(BLACK);
-    let max_font_size = 10.0;
-    let font_size = max_font_size + random::<f32>() * (IMAGE_SIZE as f32 - max_font_size);
-    let x =  random::<f32>() * (IMAGE_SIZE as f32 - font_size);
-    let y =  random::<f32>() * (font_size - IMAGE_SIZE as f32);
+    let min_font_size = 10.0;
+    let font_size = min_font_size + random::<f32>() * (IMAGE_SIZE as f32 - min_font_size);
+    let wiggle = IMAGE_SIZE as f32 - font_size;
+    let x =  random::<f32>() * wiggle;
+    let y =  -(1.0 + random::<f32>() * wiggle);
     let number = (10. * random::<f32>()).floor() as usize;
     let number_string = "0123456789";
     draw_text_ex(&number_string[number..number+1], x, y,
             TextParams {
-            font_size: max_font_size.floor() as u16,
-            font_scale: 1.25 * font_size / max_font_size.floor(),
+            font_size: (IMAGE_SIZE + IMAGE_SIZE / 4) as u16,
+            font_scale: font_size / IMAGE_SIZE as f32,
             font: *font,
             ..Default::default()
         });
@@ -98,16 +99,16 @@ async fn main() {
             generation += 1;
             step = false;
             // Tuple: (ai, score)
-            let mut test_ais = vec![(vai::VAI::<INPUTS,10,C,H>::new(), 0.0 as f32); 100];
+            let mut test_ais = vec![(vai::VAI::<INPUTS,10,C,H>::new(), 0.0 as f32); 200];
             for i in 0..test_ais.len() {
                 if i < best_ais.len() {
                     test_ais[i].0 = best_ais[i];
                 } else {
-                    let intensity = random::<f32>() * (i / best_ais.len()) as f32;
+                    let intensity = random::<f32>() + (i / best_ais.len()) as f32;
                     test_ais[i].0 = best_ais[i % best_ais.len()].create_variant(intensity);
                 }
             }
-            let tests_per_generation = 1000;
+            let tests_per_generation = 2000;
             for _ in 0..tests_per_generation {
                 test_number = create_random_render(render_target, &font);
                 inputs = extract_pixels(&render_target.texture);
