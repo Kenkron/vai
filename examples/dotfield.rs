@@ -52,7 +52,9 @@ fn test<const I: usize, const C: usize, const E: usize>(
         input[0] = 1.0;
         input[1] = x;
         input[2] = y;
-        //input[3] = ((x*PI).sin() + (y*PI).sin()) * 0.5;
+        // This line of code, along with an extra input node, unsurprisingly makes the neural
+        // network run a lot better.
+        // input[3] = ((x*std::f32::consts::PI).sin() + (y*std::f32::consts::PI).sin()) * 0.5;
         let out = ai.process(&input)[0];
         let actual = outside(x, y);
         let path:usize;
@@ -101,9 +103,7 @@ fn window_conf() -> Conf {
 #[macroquad::main(window_conf)]
 async fn main() {
     let mut rng = StdRng::seed_from_u64(0);
-
     let mut best_ai = vai::VAI::<3, 1, 16, 1>::new();
-    //best_ai = best_ai.create_variant(1.0);
     let mut score = test(&best_ai, &mut rng, |_,_,_| ());
 
     println!("Starting ai:\n{}", best_ai);
@@ -120,23 +120,13 @@ async fn main() {
         if is_key_pressed(KeyCode::Escape) {
             break;
         }
-        if is_key_pressed(KeyCode::T) {
-            tweaking = !tweaking;
-        }
-        if is_key_pressed(KeyCode::Enter) {
-            step = true;
-        }
-        if is_key_pressed(KeyCode::Space) {
-            paused = !paused;
-        }
+        tweaking ^= is_key_pressed(KeyCode::T);
+        step ^= is_key_pressed(KeyCode::Enter);
+        paused ^= is_key_pressed(KeyCode::Space);
+        quiet ^= is_key_pressed(KeyCode::Q);
+        show_best ^= is_key_pressed(KeyCode::B);
         if is_key_pressed(KeyCode::P) {
             println!("best ai: {}", best_ai)
-        }
-        if is_key_pressed(KeyCode::Q) {
-            quiet = !quiet;
-        }
-        if is_key_pressed(KeyCode::B) {
-            show_best = !show_best;
         }
         rng = StdRng::seed_from_u64(generation);
         for _ in 0..16 {
@@ -154,11 +144,11 @@ async fn main() {
                 // Constantly update best score based on new data
                 score = (score * 15. + re_check) * 0.0625;
                 if s < score {
-                    //draw_text(&format!("Score was better: {}", s), 10., 260., 20., WHITE);
+                    draw_text(&format!("Score was better: {}", s), 10., 260., 20., WHITE);
                     best_ai = test_ai.clone();
                     score = s;
                 } else {
-                    //draw_text(&format!("Score was worse: {}", s), 10., 260., 20., WHITE);
+                    draw_text(&format!("Score was worse: {}", s), 10., 260., 20., WHITE);
                 }
             }
         }
