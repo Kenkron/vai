@@ -3,7 +3,8 @@ use std::io::{Write, self, Lines};
 
 extern crate nalgebra as na;
 use na::SMatrix;
-extern crate rand;
+use rand::{self, Rng, SeedableRng};
+use rand::rngs::StdRng;
 
 /// Maps a 0-1 valud to +- infinity, with low weighted extremes
 pub fn infinite_map(input: f32) -> f32 {
@@ -17,7 +18,7 @@ pub fn infinite_map(input: f32) -> f32 {
 /// Creates a random variation of a matrix
 /// * original - The matrix that will be varied
 /// * intensity - The severity to which the matrix will be randomized.
-/// 
+///
 /// Intensity affects the random distribution to favor smaller values, but the
 /// resulting matrix can still be changed by an arbitrary amount.
 pub fn create_variant<const R: usize, const C: usize>(original: &na::SMatrix<f32, R, C>, intensity: f32)
@@ -27,6 +28,19 @@ pub fn create_variant<const R: usize, const C: usize>(original: &na::SMatrix<f32
     let mut variance = na::SMatrix::<f32, R, C>::new_random();
     variance.apply(|x| *x = infinite_map(*x));
     return original + variance.scale(intensity);
+}
+
+/// Creates a random variation of a matrix using a provided StdRng
+/// * original - The matrix that will be varied
+/// * intensity - The severity to which the matrix will be randomized.
+///
+/// Intensity affects the random distribution to favor smaller values, but the
+/// resulting matrix can still be changed by an arbitrary amount.
+pub fn create_variant_stdrng<const R: usize, const C: usize>(rng: &mut StdRng, original: &na::SMatrix<f32, R, C>, intensity: f32)
+-> na::SMatrix<f32, R, C> {
+    let mut result = original.clone_owned();
+    result.apply(|x| *x += intensity * infinite_map(rng.gen::<f32>()));
+    return result;
 }
 
 /// Gets a random index less than the provided length
@@ -101,7 +115,7 @@ pub fn read_matrix<const R: usize, const C: usize>(
 /// * O: Number of outputs
 /// * C: Complexity of (number of nodes in) hidden layers
 /// * EXTRA_LAYERS: There is always at least one hidden layer. This number adds more.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct
 VAI<
     const I: usize,
@@ -109,9 +123,10 @@ VAI<
     const C: usize,
     const EXTRA_LAYERS: usize>
 {
-    input_connections: na::SMatrix::<f32, C, I>,
-    hidden_connections: [na::SMatrix::<f32, C, C>; EXTRA_LAYERS],
-    output_connections: na::SMatrix::<f32, O, C>
+    pub rng: StdRng,
+    pub input_connections: na::SMatrix::<f32, C, I>,
+    pub hidden_connections: [na::SMatrix::<f32, C, C>; EXTRA_LAYERS],
+    pub output_connections: na::SMatrix::<f32, O, C>
 }
 
 impl<
@@ -140,6 +155,18 @@ VAI<I, O, C, EXTRA_LAYERS> {
     /// Creates a VAI with zeros for all connection weights
     pub fn new() -> Self {
         Self {
+            rng: StdRng::seed_from_u64(rand::random()),
+            input_connections: na::SMatrix::<f32, C, I>::zeros(),
+            hidden_connections: [na::SMatrix::<f32, C, C>::zeros(); EXTRA_LAYERS],
+            output_connections: na::SMatrix::<f32, O, C>::zeros()
+        }
+    }
+
+    /// Creates a VAI with zeros for all connection weights,
+    /// using a specific seed for random number generatoin.
+    pub fn new_deterministic(seed: u64) -> Self {
+        Self {
+            rng: StdRng::seed_from_u64(seed),
             input_connections: na::SMatrix::<f32, C, I>::zeros(),
             hidden_connections: [na::SMatrix::<f32, C, C>::zeros(); EXTRA_LAYERS],
             output_connections: na::SMatrix::<f32, O, C>::zeros()
@@ -158,19 +185,19 @@ VAI<I, O, C, EXTRA_LAYERS> {
     /// connections in the network before being applied.
     /// 
     /// see also:
-    ///  * [`create_variant`]
+    ///  * [`create_variant_stdrng`]
     ///  * [`VAI::create_layer_variant`]
-    pub fn create_variant(&self, intensity: f32) -> Self {
+    pub fn create_variant(&mut self, intensity: f32) -> Self {
         let mut result = self.clone();
         let fields = I * C + C * C * EXTRA_LAYERS + C * O;
         let s_intensity = intensity/(1.0 + fields as f32);
         result.input_connections =
-            create_variant(&result.input_connections, intensity);
+            create_variant_stdrng(&mut self.rng, &result.input_connections, intensity);
         for mat in &mut result.hidden_connections {
-            *mat = create_variant(&mat, s_intensity);
+            *mat = create_variant_stdrng(&mut self.rng, &mat, s_intensity);
         }
         result.output_connections =
-            create_variant(&result.output_connections, s_intensity);
+            create_variant_stdrng(&mut self.rng, &result.output_connections, s_intensity);
         return result;
     }
 
@@ -187,24 +214,24 @@ VAI<I, O, C, EXTRA_LAYERS> {
     /// connections in the chosen layer before being applied.
     /// 
     /// see also:
-    ///  * [`create_variant`]
-    ///  * [`VAI::create_variant`]
-    pub fn create_layer_variant(&self, intensity: f32) -> Self {
+    ///  * [`create_variant_stdrng`]
+    ///  * [`VAI::create_variant_stdrng`]
+    pub fn create_layer_variant(&mut self, intensity: f32) -> Self {
         let mut result = self.clone();
         let hidden_connections = &mut result.hidden_connections;
         let layer = rand_index(hidden_connections.len() + 2);
         if layer < hidden_connections.len() {
             let original = &hidden_connections[layer];
             let intensity = intensity/(C * C + 1) as f32;
-            hidden_connections[layer] = create_variant(original,intensity);
+            hidden_connections[layer] = create_variant_stdrng(&mut self.rng, original,intensity);
         } else if layer == hidden_connections.len() {
             let original = &result.input_connections;
             let intensity = intensity/(I * C + 1) as f32;
-            result.input_connections = create_variant(original, intensity);
+            result.input_connections = create_variant_stdrng(&mut self.rng,original, intensity);
         } else {
             let original = &result.output_connections;
             let intensity = intensity/(C * O + 1) as f32;
-            result.output_connections = create_variant(original, intensity);
+            result.output_connections = create_variant_stdrng(&mut self.rng,original, intensity);
         } 
         return result;
     }
