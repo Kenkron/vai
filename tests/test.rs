@@ -30,7 +30,7 @@ fn non_linear_score<const C: usize, const H: usize>(ai: &vai::VAI<2,1,C,H>)
 
 #[test]
 fn linear_test() {
-    let mut best_ai = vai::VAI::<2, 1, 4, 0>::new();
+    let mut best_ai = vai::VAI::<2, 1, 4, 0>::new_deterministic(0);
     let mut best_score = linear_score(&best_ai);
     let initial_score = best_score;
     println!("Initial Score: {}", initial_score);
@@ -50,7 +50,7 @@ fn linear_test() {
 
 #[test]
 fn non_linear_test() {
-    let mut best_ai = vai::VAI::<2, 1, 4, 0>::new();
+    let mut best_ai = vai::VAI::<2, 1, 4, 0>::new_deterministic(0);
     let mut best_score = non_linear_score(&best_ai);
     let initial_score = best_score;
     println!("Initial Score: {}", initial_score);

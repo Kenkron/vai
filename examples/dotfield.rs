@@ -103,7 +103,7 @@ fn window_conf() -> Conf {
 #[macroquad::main(window_conf)]
 async fn main() {
     let mut rng = StdRng::seed_from_u64(0);
-    let mut best_ai = vai::VAI::<3, 1, 16, 1>::new();
+    let mut best_ai = vai::VAI::<3, 1, 16, 1>::new_deterministic(0);
     let mut score = test(&best_ai, &mut rng, |_,_,_| ());
 
     println!("Starting ai:\n{}", best_ai);

@@ -84,7 +84,9 @@ async fn main() {
     const H: usize = 0;
     const C: usize = 32;
 
-    let mut best_ais = [vai::VAI::<INPUTS,10,C,H>::new().create_variant(1.0); 5];
+    let mut best_ais: [vai::VAI<INPUTS,10,C,H>; 5] = std::array::from_fn(|i| {
+        vai::VAI::<INPUTS,10,C,H>::new_deterministic(i as u64).create_variant(1.0)
+    });
     let mut test_number = create_random_render(render_target, &font);
     let mut best_outputs = na::SMatrix::<f32, 10, 1>::zeros();
     let mut best_score = f32::INFINITY;
@@ -102,7 +104,7 @@ async fn main() {
             let mut test_ais = vec![(vai::VAI::<INPUTS,10,C,H>::new(), 0.0 as f32); 100];
             for i in 0..test_ais.len() {
                 if i < best_ais.len() {
-                    test_ais[i].0 = best_ais[i];
+                    test_ais[i].0 = best_ais[i].clone();
                 } else {
                     let intensity = random::<f32>() + (i / best_ais.len()) as f32;
                     test_ais[i].0 = best_ais[i % best_ais.len()].create_variant(intensity);
@@ -119,7 +121,7 @@ async fn main() {
             test_ais.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
             best_score = test_ais[0].1;
             for i in 0..best_ais.len() {
-                best_ais[i] = test_ais[i].0;
+                best_ais[i] = test_ais[i].0.clone();
             }
             // recalculate for debugging
             best_outputs = best_ais[0].process(&inputs);
