@@ -166,7 +166,7 @@ async fn main() {
                 color);
         }
         if is_key_pressed(KeyCode::S) {
-            match std::fs::File::create("./save.vai") {
+            match std::fs::File::create("./character-save.vai") {
                 Ok(mut file) => {
                     match best_ais[0].write(&mut file) {
                         Ok(_) => {
@@ -179,7 +179,7 @@ async fn main() {
             };
         }
         if is_key_pressed(KeyCode::O) {
-            match std::fs::File::open("./save.vai") {
+            match std::fs::File::open("./character-save.vai") {
                 Ok(file) => {
                     match vai::VAI::<INPUTS, 10, C, H>::read(
                         &mut std::io::BufReader::new(file).lines()) {

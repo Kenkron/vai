@@ -170,7 +170,7 @@ async fn main() {
         }
         draw_text(&format!("Generation: {}", generation), 10., 290., 20.0, WHITE);
         if is_key_pressed(KeyCode::S) {
-            match std::fs::File::create("./save.vai") {
+            match std::fs::File::create("./dotfield-save.vai") {
                 Ok(mut file) => {
                     match best_ai.write(&mut file) {
                         Ok(_) => {
@@ -183,7 +183,7 @@ async fn main() {
             };
         }
         if is_key_pressed(KeyCode::O) {
-            match std::fs::File::open("./save.vai") {
+            match std::fs::File::open("./dotfield-save.vai") {
                 Ok(file) => {
                     match vai::VAI::<3, 1, 16, 1>::read(
                         &mut std::io::BufReader::new(file).lines()) {
