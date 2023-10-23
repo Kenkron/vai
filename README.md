@@ -1,6 +1,8 @@
 Very Artificial Intelligence
 ============================
 
+![Result](https://github.com/Kenkron/vai/actions/workflows/rust.yml/badge.svg)
+
 A primitive implementation of a neural network.
 
 > VAI is a simple implementation of a Deep Learning Neural Network
@@ -38,4 +40,4 @@ its task.
 
 These videos were entertaining and, as far as I could figure, avoided most
 of the "hard part" of neural networks. Backpropogation? Who needs it?
-Just roll the dice with a couple of matrices and a RELU function!
+Just roll the dice with a couple of matrices and a ReLu function!
