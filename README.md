@@ -26,3 +26,16 @@ examples
  * **character_recognition:** Trains a Vai to recognize characters
  
 Further information in [examples/README.md]
+
+disclaimer
+----------
+
+I made this library as a bit of a joke. A bunch of youtube videos were appearing
+in my feed that featured "evolutionary" creatures powered by neural networks.
+The premise was that each new generation would introduce a random variation to
+the best of the previous generation, until the creature became really good at
+its task.
+
+These videos were entertaining and, as far as I could figure, avoided most
+of the "hard part" of neural networks. Backpropogation? Who needs it?
+Just roll the dice with a couple of matrices and a RELU function!
