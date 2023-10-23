@@ -1,7 +1,7 @@
 Very Artificial Intelligence
 ============================
 
-![Result](https://github.com/Kenkron/vai/actions/workflows/rust.yml/badge.svg)
+![Tests](https://github.com/Kenkron/vai/actions/workflows/Tests.yml/badge.svg)
 
 A primitive implementation of a neural network.
 
@@ -26,7 +26,7 @@ examples
 
  * **dotfield:** Trains a Vai to outline two circles
  * **character_recognition:** Trains a Vai to recognize characters
- 
+
 Further information in [examples/README.md]
 
 disclaimer
