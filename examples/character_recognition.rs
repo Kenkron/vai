@@ -5,41 +5,44 @@ use std::io::BufRead;
 use rand::random;
 use rayon::prelude::*;
 
-use macroquad::{text::draw_text, window::next_frame};
 use macroquad::prelude::*;
+use macroquad::{text::draw_text, window::next_frame};
 use nalgebra as na;
 
 const IMAGE_SIZE: usize = 16;
 const PIXEL_COUNT: usize = IMAGE_SIZE * IMAGE_SIZE;
 const INPUTS: usize = PIXEL_COUNT + 1;
 
-fn create_random_render(render_target: RenderTarget, font: &Font) 
--> usize{
+fn create_random_render(render_target: RenderTarget, font: &Font) -> usize {
     // 0..32, 0..32 camera
-    let mut cam = Camera2D::from_display_rect(Rect::new(0.,0.,IMAGE_SIZE as f32,-(IMAGE_SIZE as f32)));
+    let mut cam =
+        Camera2D::from_display_rect(Rect::new(0., 0., IMAGE_SIZE as f32, -(IMAGE_SIZE as f32)));
     cam.render_target = Some(render_target);
     set_camera(&cam);
     clear_background(BLACK);
     let min_font_size = 12.0;
     let font_size = min_font_size + random::<f32>() * (IMAGE_SIZE as f32 - min_font_size);
     let wiggle = IMAGE_SIZE as f32 - font_size;
-    let x =  random::<f32>() * wiggle;
-    let y =  -(1.0 + random::<f32>() * wiggle);
+    let x = random::<f32>() * wiggle;
+    let y = -(1.0 + random::<f32>() * wiggle);
     let number = (10. * random::<f32>()).floor() as usize;
     let number_string = "0123456789";
-    draw_text_ex(&number_string[number..number+1], x, y,
-            TextParams {
+    draw_text_ex(
+        &number_string[number..number + 1],
+        x,
+        y,
+        TextParams {
             font_size: (IMAGE_SIZE + IMAGE_SIZE / 4) as u16,
             font_scale: font_size / IMAGE_SIZE as f32,
             font: *font,
             ..Default::default()
-        });
+        },
+    );
     set_default_camera();
     return number;
 }
 
-fn extract_pixels(texture: &Texture2D)
--> na::SMatrix<f32, INPUTS, 1>{
+fn extract_pixels(texture: &Texture2D) -> na::SMatrix<f32, INPUTS, 1> {
     let pixels = texture.get_texture_data().bytes;
     let mut result = na::SMatrix::<f32, INPUTS, 1>::zeros();
     for i in 0..PIXEL_COUNT {
@@ -49,8 +52,7 @@ fn extract_pixels(texture: &Texture2D)
     return result;
 }
 
-fn score(test_number: usize, actual: &na::SMatrix<f32, 10, 1>)
--> f32 {
+fn score(test_number: usize, actual: &na::SMatrix<f32, 10, 1>) -> f32 {
     let number_val = actual[test_number];
     let mut nth = 0.0;
     for i in 0..10 {
@@ -73,7 +75,9 @@ fn window_conf() -> Conf {
 
 #[macroquad::main(window_conf)]
 async fn main() {
-    let font = load_ttf_font("./examples/OpenSans-Regular.ttf").await.unwrap();
+    let font = load_ttf_font("./examples/OpenSans-Regular.ttf")
+        .await
+        .unwrap();
     let render_target = render_target(IMAGE_SIZE as u32, IMAGE_SIZE as u32);
     render_target.texture.set_filter(FilterMode::Nearest);
     let mut generation = 0;
@@ -84,8 +88,8 @@ async fn main() {
     const H: usize = 0;
     const C: usize = 32;
 
-    let mut best_ais: [vai::VAI<INPUTS,10,C,H>; 5] = std::array::from_fn(|i| {
-        vai::VAI::<INPUTS,10,C,H>::new_deterministic(i as u64).create_variant(1.0)
+    let mut best_ais: [vai::VAI<INPUTS, 10, C, H>; 5] = std::array::from_fn(|i| {
+        vai::VAI::<INPUTS, 10, C, H>::new_deterministic(i as u64).create_variant(1.0)
     });
     let mut test_number = create_random_render(render_target, &font);
     let mut best_outputs = na::SMatrix::<f32, 10, 1>::zeros();
@@ -101,7 +105,7 @@ async fn main() {
             generation += 1;
             step = false;
             // Tuple: (ai, score)
-            let mut test_ais = vec![(vai::VAI::<INPUTS,10,C,H>::new(), 0.0 as f32); 100];
+            let mut test_ais = vec![(vai::VAI::<INPUTS, 10, C, H>::new(), 0.0 as f32); 100];
             for i in 0..test_ais.len() {
                 if i < best_ais.len() {
                     test_ais[i].0 = best_ais[i].clone();
@@ -138,17 +142,27 @@ async fn main() {
                 ..Default::default()
             },
         );
-        draw_text(format!("Generation: {}", generation).as_str(), 10., (IMAGE_SIZE * 20) as f32 + 20., 20., WHITE);
-        draw_text(format!("Best Score: {}", best_score).as_str(), 10., (IMAGE_SIZE * 20) as f32 + 40., 20., WHITE);
+        draw_text(
+            format!("Generation: {}", generation).as_str(),
+            10.,
+            (IMAGE_SIZE * 20) as f32 + 20.,
+            20.,
+            WHITE,
+        );
+        draw_text(
+            format!("Best Score: {}", best_score).as_str(),
+            10.,
+            (IMAGE_SIZE * 20) as f32 + 40.,
+            20.,
+            WHITE,
+        );
         //let mut best_readable = String::new();
         let mut best_tuple = Vec::<(usize, f32)>::new();
         for i in 0..10 {
             //best_readable = format!("{} {}", best_readable, best_outputs[i]);
             best_tuple.push((i, best_outputs[i]));
         }
-        best_tuple.sort_by(|a, b| {
-            b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
-        });
+        best_tuple.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         for i in 0..best_tuple.len() {
             let mut color = ORANGE;
             if best_tuple[i].0 == test_number {
@@ -163,7 +177,8 @@ async fn main() {
                 10.0,
                 (IMAGE_SIZE * 20 + 60 + i * 20) as f32,
                 20.0,
-                color);
+                color,
+            );
         }
         if is_key_pressed(KeyCode::S) {
             match std::fs::File::create("./character-save.vai") {
@@ -171,26 +186,35 @@ async fn main() {
                     match best_ais[0].write(&mut file) {
                         Ok(_) => {
                             println!("Saved matrix");
-                        },
-                        Err(err) => {println!("Save Error: {}", err)},
+                        }
+                        Err(err) => {
+                            println!("Save Error: {}", err)
+                        }
                     };
-                },
-                Err(err) => {println!("Save Error: {}", err)},
+                }
+                Err(err) => {
+                    println!("Save Error: {}", err)
+                }
             };
         }
         if is_key_pressed(KeyCode::O) {
             match std::fs::File::open("./character-save.vai") {
                 Ok(file) => {
                     match vai::VAI::<INPUTS, 10, C, H>::read(
-                        &mut std::io::BufReader::new(file).lines()) {
+                        &mut std::io::BufReader::new(file).lines(),
+                    ) {
                         Ok(result) => {
                             best_ais[0] = result;
                             println!("Loaded matrix");
-                        },
-                        Err(err) => {println!("Load Error: {}", err)},
+                        }
+                        Err(err) => {
+                            println!("Load Error: {}", err)
+                        }
                     };
-                },
-                Err(err) => {println!("Load Error: {}", err)},
+                }
+                Err(err) => {
+                    println!("Load Error: {}", err)
+                }
             };
         }
         next_frame().await
