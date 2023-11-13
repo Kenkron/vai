@@ -3,7 +3,8 @@ use std::io::{Write, self, Lines};
 
 extern crate nalgebra as na;
 use na::SMatrix;
-use rand::{self, Rng, SeedableRng};
+extern crate rand;
+use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 
 /// Maps a 0-1 valud to +- infinity, with low weighted extremes
@@ -215,7 +216,6 @@ VAI<I, O, C, EXTRA_LAYERS> {
     ///
     /// see also:
     ///  * [`create_variant_stdrng`]
-    ///  * [`VAI::create_variant_stdrng`]
     pub fn create_layer_variant(&mut self, intensity: f32) -> Self {
         let mut result = self.clone();
         let hidden_connections = &mut result.hidden_connections;
@@ -240,8 +240,8 @@ VAI<I, O, C, EXTRA_LAYERS> {
     /// * inputs - The inputs. One of them should be a constant for a bias.
     ///
     /// see also:
-    ///  * [`process_slice`]
-    ///  * ['process_transparent']
+    ///  * [`VAI::process_slice`]
+    ///  * [`VAI::process_transparent`]
     pub fn process(&self, inputs: &na::SMatrix<f32, I, 1>)
     -> na::SMatrix<f32, O, 1> {
         let mut intermediate = self.input_connections * inputs;
@@ -259,7 +259,7 @@ VAI<I, O, C, EXTRA_LAYERS> {
     /// * inputs - The inputs. One of them should be a constant for a bias.
     ///
     /// see also:
-    ///  * [`process`]
+    ///  * [`VAI::process`]
     pub fn process_slice(&self , inputs: &[f32]) -> Vec<f32> {
         let matrix_inputs = na::SMatrix::<f32, I, 1>::from_column_slice(inputs);
         let output = self.process(&matrix_inputs);
@@ -268,22 +268,25 @@ VAI<I, O, C, EXTRA_LAYERS> {
 
     /// Runs an input matrix through the neural network to get an output
     /// returning the value of all the nodes: input, hidden, and output.
+    ///
+    /// Note: the value of hidden nodes is supplie *before*
+    /// relu to preserve information
     /// * inputs - The inputs. One of them should be a constant for a bias.
     ///
     /// see also:
-    ///  * [`process_slice_transparent`]
+    ///  * [`VAI::process_slice_transparent`]
     pub fn process_transparent(&self, inputs: &na::SMatrix<f32, I, 1>)
     -> Vec<Vec<f32>> {
         let mut output: Vec<Vec<f32>> = vec![inputs.iter().map(|x| x.to_owned()).collect()];
         let mut intermediate = self.input_connections * inputs;
+        output.push(intermediate.iter().map(|x| x.to_owned()).collect());
         // Apply relu
         intermediate.apply(|x| *x = x.max(0.));
-        output.push(intermediate.iter().map(|x| x.to_owned()).collect());
         for mat in &self.hidden_connections {
             intermediate = mat * intermediate;
+            output.push(intermediate.iter().map(|x| x.to_owned()).collect());
             // Apply relu
             intermediate.apply(|x| *x = x.max(0.));
-            output.push(intermediate.iter().map(|x| x.to_owned()).collect());
         }
         let out = self.output_connections * intermediate;
         output.push(out.iter().map(|x| x.to_owned()).collect());
@@ -295,7 +298,7 @@ VAI<I, O, C, EXTRA_LAYERS> {
     /// * inputs - The inputs. One of them should be a constant for a bias.
     ///
     /// see also:
-    ///  * [`process_transparent`]
+    ///  * [`VAI::process_transparent`]
     pub fn process_slice_transparent(&self , inputs: &[f32])
     -> Vec<Vec<f32>> {
         let matrix_inputs = na::SMatrix::<f32, I, 1>::from_column_slice(inputs);
