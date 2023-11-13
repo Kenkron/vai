@@ -1,3 +1,6 @@
+#![allow(clippy::needless_return)]
+
+use std::cmp::Ordering;
 use std::{fmt::Display, fs::File};
 use std::io::{Write, self, Lines};
 
@@ -62,9 +65,9 @@ pub fn write_matrix<const R: usize, const C: usize>(
         for c in 0..C {
             write!(file, "{} ", row.get(c).unwrap())?;
         }
-        writeln!(file, "")?;
+        writeln!(file)?;
     }
-    writeln!(file, "")?;
+    writeln!(file)?;
     return Ok(());
 }
 
@@ -80,7 +83,7 @@ pub fn read_matrix<const R: usize, const C: usize>(
     for line in lines {
         let line = line?;
         let vals: Vec<&str> = line.split_whitespace().collect();
-        if vals.len() == 0 {
+        if vals.is_empty() {
             continue; // Skip empty lines
         }
         if vals.len() != C {
@@ -88,8 +91,8 @@ pub fn read_matrix<const R: usize, const C: usize>(
                 io::ErrorKind::InvalidInput,
                 "Wrong number of columns"));
         }
-        for c in 0..vals.len() {
-            result.row_mut(r)[c] = match vals[c].parse() {
+        for (c, val) in vals.iter().enumerate() {
+            result.row_mut(r)[c] = match val.parse() {
                 Ok(x) => {x},
                 Err(_) => {
                     return Err(io::Error::new(
@@ -147,6 +150,13 @@ Display for VAI<I, O, HIDDEN_LAYERS, LAYER_SIZE> {
     }
 }
 
+impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
+Default for VAI<I, O, C, EXTRA_LAYERS> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<
     const I: usize,
     const O: usize,
@@ -195,7 +205,7 @@ VAI<I, O, C, EXTRA_LAYERS> {
         result.input_connections =
             create_variant_stdrng(&mut self.rng, &result.input_connections, intensity);
         for mat in &mut result.hidden_connections {
-            *mat = create_variant_stdrng(&mut self.rng, &mat, s_intensity);
+            *mat = create_variant_stdrng(&mut self.rng, mat, s_intensity);
         }
         result.output_connections =
             create_variant_stdrng(&mut self.rng, &result.output_connections, s_intensity);
@@ -220,18 +230,20 @@ VAI<I, O, C, EXTRA_LAYERS> {
         let mut result = self.clone();
         let hidden_connections = &mut result.hidden_connections;
         let layer = rand_index(hidden_connections.len() + 2);
-        if layer < hidden_connections.len() {
-            let original = &hidden_connections[layer];
-            let intensity = intensity/(C * C + 1) as f32;
-            hidden_connections[layer] = create_variant_stdrng(&mut self.rng, original,intensity);
-        } else if layer == hidden_connections.len() {
-            let original = &result.input_connections;
-            let intensity = intensity/(I * C + 1) as f32;
-            result.input_connections = create_variant_stdrng(&mut self.rng,original, intensity);
-        } else {
-            let original = &result.output_connections;
-            let intensity = intensity/(C * O + 1) as f32;
-            result.output_connections = create_variant_stdrng(&mut self.rng,original, intensity);
+        let intensity = intensity/(C * C + 1) as f32;
+        match layer.cmp(&hidden_connections.len()) {
+            Ordering::Less => {
+                let original = &hidden_connections[layer];
+                hidden_connections[layer] = create_variant_stdrng(&mut self.rng, original, intensity);
+            }
+            Ordering::Equal => {
+                let original = &result.input_connections;
+                result.input_connections = create_variant_stdrng(&mut self.rng, original, intensity);
+            }
+            Ordering::Greater => {
+                let original = &result.output_connections;
+                result.output_connections = create_variant_stdrng(&mut self.rng, original, intensity);
+            }
         }
         return result;
     }
