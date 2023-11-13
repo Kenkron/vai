@@ -1,14 +1,14 @@
 #![allow(clippy::needless_return)]
 
 use std::cmp::Ordering;
+use std::io::{self, Lines, Write};
 use std::{fmt::Display, fs::File};
-use std::io::{Write, self, Lines};
 
 extern crate nalgebra as na;
 use na::SMatrix;
 extern crate rand;
-use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 
 /// Maps a 0-1 valud to +- infinity, with low weighted extremes
 pub fn infinite_map(input: f32) -> f32 {
@@ -16,7 +16,7 @@ pub fn infinite_map(input: f32) -> f32 {
         return 0.;
     }
     let x = input - 0.5;
-    return 0.5 * x/(0.25 - x*x).sqrt();
+    return 0.5 * x / (0.25 - x * x).sqrt();
 }
 
 /// Creates a random variation of a matrix
@@ -25,8 +25,10 @@ pub fn infinite_map(input: f32) -> f32 {
 ///
 /// Intensity affects the random distribution to favor smaller values, but the
 /// resulting matrix can still be changed by an arbitrary amount.
-pub fn create_variant<const R: usize, const C: usize>(original: &na::SMatrix<f32, R, C>, intensity: f32)
--> na::SMatrix<f32, R, C> {
+pub fn create_variant<const R: usize, const C: usize>(
+    original: &na::SMatrix<f32, R, C>,
+    intensity: f32,
+) -> na::SMatrix<f32, R, C> {
     // Adding two variances increases the odds of small changes,
     // but also makes larger infrequent changes possible
     let mut variance = na::SMatrix::<f32, R, C>::new_random();
@@ -40,8 +42,11 @@ pub fn create_variant<const R: usize, const C: usize>(original: &na::SMatrix<f32
 ///
 /// Intensity affects the random distribution to favor smaller values, but the
 /// resulting matrix can still be changed by an arbitrary amount.
-pub fn create_variant_stdrng<const R: usize, const C: usize>(rng: &mut StdRng, original: &na::SMatrix<f32, R, C>, intensity: f32)
--> na::SMatrix<f32, R, C> {
+pub fn create_variant_stdrng<const R: usize, const C: usize>(
+    rng: &mut StdRng,
+    original: &na::SMatrix<f32, R, C>,
+    intensity: f32,
+) -> na::SMatrix<f32, R, C> {
     let mut result = original.clone_owned();
     result.apply(|x| *x += intensity * infinite_map(rng.gen::<f32>()));
     return result;
@@ -58,8 +63,8 @@ fn rand_index(len: usize) -> usize {
 /// * file - The file to write to
 pub fn write_matrix<const R: usize, const C: usize>(
     matrix: &SMatrix<f32, R, C>,
-    file: &mut File)
--> std::io::Result<()> {
+    file: &mut File,
+) -> std::io::Result<()> {
     for r in 0..R {
         let row = matrix.row(r);
         for c in 0..C {
@@ -76,8 +81,8 @@ pub fn write_matrix<const R: usize, const C: usize>(
 /// * lines - A line iterator from which to read the matrix
 /// (generally provided by BufReader::new(file).lines())
 pub fn read_matrix<const R: usize, const C: usize>(
-    lines: &mut Lines<std::io::BufReader<File>>)
--> std::io::Result<SMatrix<f32, R, C>> {
+    lines: &mut Lines<std::io::BufReader<File>>,
+) -> std::io::Result<SMatrix<f32, R, C>> {
     let mut result = SMatrix::<f32, R, C>::zeros();
     let mut r = 0;
     for line in lines {
@@ -89,16 +94,18 @@ pub fn read_matrix<const R: usize, const C: usize>(
         if vals.len() != C {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "Wrong number of columns"));
+                "Wrong number of columns",
+            ));
         }
         for (c, val) in vals.iter().enumerate() {
             result.row_mut(r)[c] = match val.parse() {
-                Ok(x) => {x},
+                Ok(x) => x,
                 Err(_) => {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
-                        "Invalid number"));
-                },
+                        "Invalid number",
+                    ));
+                }
             };
         }
         r += 1;
@@ -109,7 +116,8 @@ pub fn read_matrix<const R: usize, const C: usize>(
     if r != R {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "Wrong number of rows"));
+            "Wrong number of rows",
+        ));
     }
     return Ok(result);
 }
@@ -120,28 +128,19 @@ pub fn read_matrix<const R: usize, const C: usize>(
 /// * C: Complexity of (number of nodes in) hidden layers
 /// * EXTRA_LAYERS: There is always at least one hidden layer. This number adds more.
 #[derive(Clone)]
-pub struct
-VAI<
-    const I: usize,
-    const O: usize,
-    const C: usize,
-    const EXTRA_LAYERS: usize>
-{
+pub struct VAI<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize> {
     pub rng: StdRng,
-    pub input_connections: na::SMatrix::<f32, C, I>,
-    pub hidden_connections: [na::SMatrix::<f32, C, C>; EXTRA_LAYERS],
-    pub output_connections: na::SMatrix::<f32, O, C>
+    pub input_connections: na::SMatrix<f32, C, I>,
+    pub hidden_connections: [na::SMatrix<f32, C, C>; EXTRA_LAYERS],
+    pub output_connections: na::SMatrix<f32, O, C>,
 }
 
-impl<
-    const I: usize,
-    const O: usize,
-    const HIDDEN_LAYERS: usize,
-    const LAYER_SIZE: usize>
-Display for VAI<I, O, HIDDEN_LAYERS, LAYER_SIZE> {
+impl<const I: usize, const O: usize, const HIDDEN_LAYERS: usize, const LAYER_SIZE: usize> Display
+    for VAI<I, O, HIDDEN_LAYERS, LAYER_SIZE>
+{
     /// Concatenates the string representations of the input,
     /// hidden layer, and output matricies.
-    fn fmt(&self,f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.input_connections)?;
         for mat in &self.hidden_connections {
             write!(f, "{}", mat)?;
@@ -150,26 +149,24 @@ Display for VAI<I, O, HIDDEN_LAYERS, LAYER_SIZE> {
     }
 }
 
-impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
-Default for VAI<I, O, C, EXTRA_LAYERS> {
+impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize> Default
+    for VAI<I, O, C, EXTRA_LAYERS>
+{
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<
-    const I: usize,
-    const O: usize,
-    const C: usize,
-    const EXTRA_LAYERS: usize>
-VAI<I, O, C, EXTRA_LAYERS> {
+impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
+    VAI<I, O, C, EXTRA_LAYERS>
+{
     /// Creates a VAI with zeros for all connection weights
     pub fn new() -> Self {
         Self {
             rng: StdRng::seed_from_u64(rand::random()),
             input_connections: na::SMatrix::<f32, C, I>::zeros(),
             hidden_connections: [na::SMatrix::<f32, C, C>::zeros(); EXTRA_LAYERS],
-            output_connections: na::SMatrix::<f32, O, C>::zeros()
+            output_connections: na::SMatrix::<f32, O, C>::zeros(),
         }
     }
 
@@ -180,7 +177,7 @@ VAI<I, O, C, EXTRA_LAYERS> {
             rng: StdRng::seed_from_u64(seed),
             input_connections: na::SMatrix::<f32, C, I>::zeros(),
             hidden_connections: [na::SMatrix::<f32, C, C>::zeros(); EXTRA_LAYERS],
-            output_connections: na::SMatrix::<f32, O, C>::zeros()
+            output_connections: na::SMatrix::<f32, O, C>::zeros(),
         }
     }
 
@@ -201,7 +198,7 @@ VAI<I, O, C, EXTRA_LAYERS> {
     pub fn create_variant(&mut self, intensity: f32) -> Self {
         let mut result = self.clone();
         let fields = I * C + C * C * EXTRA_LAYERS + C * O;
-        let s_intensity = intensity/(1.0 + fields as f32);
+        let s_intensity = intensity / (1.0 + fields as f32);
         result.input_connections =
             create_variant_stdrng(&mut self.rng, &result.input_connections, intensity);
         for mat in &mut result.hidden_connections {
@@ -230,19 +227,22 @@ VAI<I, O, C, EXTRA_LAYERS> {
         let mut result = self.clone();
         let hidden_connections = &mut result.hidden_connections;
         let layer = rand_index(hidden_connections.len() + 2);
-        let intensity = intensity/(C * C + 1) as f32;
+        let intensity = intensity / (C * C + 1) as f32;
         match layer.cmp(&hidden_connections.len()) {
             Ordering::Less => {
                 let original = &hidden_connections[layer];
-                hidden_connections[layer] = create_variant_stdrng(&mut self.rng, original, intensity);
+                hidden_connections[layer] =
+                    create_variant_stdrng(&mut self.rng, original, intensity);
             }
             Ordering::Equal => {
                 let original = &result.input_connections;
-                result.input_connections = create_variant_stdrng(&mut self.rng, original, intensity);
+                result.input_connections =
+                    create_variant_stdrng(&mut self.rng, original, intensity);
             }
             Ordering::Greater => {
                 let original = &result.output_connections;
-                result.output_connections = create_variant_stdrng(&mut self.rng, original, intensity);
+                result.output_connections =
+                    create_variant_stdrng(&mut self.rng, original, intensity);
             }
         }
         return result;
@@ -254,8 +254,7 @@ VAI<I, O, C, EXTRA_LAYERS> {
     /// see also:
     ///  * [`VAI::process_slice`]
     ///  * [`VAI::process_transparent`]
-    pub fn process(&self, inputs: &na::SMatrix<f32, I, 1>)
-    -> na::SMatrix<f32, O, 1> {
+    pub fn process(&self, inputs: &na::SMatrix<f32, I, 1>) -> na::SMatrix<f32, O, 1> {
         let mut intermediate = self.input_connections * inputs;
         // Apply relu
         intermediate.apply(|x| *x = x.max(0.));
@@ -272,7 +271,7 @@ VAI<I, O, C, EXTRA_LAYERS> {
     ///
     /// see also:
     ///  * [`VAI::process`]
-    pub fn process_slice(&self , inputs: &[f32]) -> Vec<f32> {
+    pub fn process_slice(&self, inputs: &[f32]) -> Vec<f32> {
         let matrix_inputs = na::SMatrix::<f32, I, 1>::from_column_slice(inputs);
         let output = self.process(&matrix_inputs);
         output.iter().map(|x| x.to_owned()).collect()
@@ -287,8 +286,7 @@ VAI<I, O, C, EXTRA_LAYERS> {
     ///
     /// see also:
     ///  * [`VAI::process_slice_transparent`]
-    pub fn process_transparent(&self, inputs: &na::SMatrix<f32, I, 1>)
-    -> Vec<Vec<f32>> {
+    pub fn process_transparent(&self, inputs: &na::SMatrix<f32, I, 1>) -> Vec<Vec<f32>> {
         let mut output: Vec<Vec<f32>> = vec![inputs.iter().map(|x| x.to_owned()).collect()];
         let mut intermediate = self.input_connections * inputs;
         output.push(intermediate.iter().map(|x| x.to_owned()).collect());
@@ -311,8 +309,7 @@ VAI<I, O, C, EXTRA_LAYERS> {
     ///
     /// see also:
     ///  * [`VAI::process_transparent`]
-    pub fn process_slice_transparent(&self , inputs: &[f32])
-    -> Vec<Vec<f32>> {
+    pub fn process_slice_transparent(&self, inputs: &[f32]) -> Vec<Vec<f32>> {
         let matrix_inputs = na::SMatrix::<f32, I, 1>::from_column_slice(inputs);
         return self.process_transparent(&matrix_inputs);
     }
@@ -334,8 +331,7 @@ VAI<I, O, C, EXTRA_LAYERS> {
     /// output connections in order, as read by [`read_matrix`]
     /// * lines - A line iterator from which to read the vai
     /// (generally provided by BufReader::new(file).lines())
-    pub fn read(lines: &mut Lines<std::io::BufReader<File>>)
-    -> std::io::Result<Self> {
+    pub fn read(lines: &mut Lines<std::io::BufReader<File>>) -> std::io::Result<Self> {
         let mut result = Self::new();
         result.input_connections = read_matrix(lines)?;
         for matrix in &mut result.hidden_connections {
