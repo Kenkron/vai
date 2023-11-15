@@ -18,7 +18,7 @@ rand = "0.8.5"
 rayon = "1.6.1"
 
 [lib]
-path = "src/vai.rs"
+path = "src/lib.rs"
 
 [[example]]
 name = "dotfield"

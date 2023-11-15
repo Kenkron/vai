@@ -9,15 +9,7 @@ use na::SMatrix;
 extern crate rand;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
-
-/// Maps a 0-1 valud to +- infinity, with low weighted extremes
-pub fn infinite_map(input: f32) -> f32 {
-    if input <= 0. || input >= 1. {
-        return 0.;
-    }
-    let x = input - 0.5;
-    return 0.5 * x / (0.25 - x * x).sqrt();
-}
+use crate::{infinite_map, rand_index};
 
 /// Creates a random variation of a matrix
 /// * original - The matrix that will be varied
@@ -50,11 +42,6 @@ pub fn create_variant_stdrng<const R: usize, const C: usize>(
     let mut result = original.clone_owned();
     result.apply(|x| *x += intensity * infinite_map(rng.gen::<f32>()));
     return result;
-}
-
-/// Gets a random index less than the provided length
-fn rand_index(len: usize) -> usize {
-    (rand::random::<f32>() * (len + 1) as f32).floor() as usize
 }
 
 /// Writes a matrix to a file with space-delimited columns,
@@ -162,12 +149,7 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
 {
     /// Creates a VAI with zeros for all connection weights
     pub fn new() -> Self {
-        Self {
-            rng: StdRng::seed_from_u64(rand::random()),
-            input_connections: na::SMatrix::<f32, C, I>::zeros(),
-            hidden_connections: [na::SMatrix::<f32, C, C>::zeros(); EXTRA_LAYERS],
-            output_connections: na::SMatrix::<f32, O, C>::zeros(),
-        }
+        Self::new_deterministic(rand::random())
     }
 
     /// Creates a VAI with zeros for all connection weights,
