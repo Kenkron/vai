@@ -1,13 +1,13 @@
 use std::io::BufRead;
 use std::sync::{Arc, Mutex};
 
-use rayon::prelude::*;
-use rand::{self, Rng, SeedableRng};
-use rand::rngs::StdRng;
-use macroquad::{text::draw_text, shapes::draw_circle, window::next_frame};
-use macroquad::prelude::{is_key_pressed, KeyCode, is_key_down, Conf};
-use macroquad::prelude::{GRAY, RED, PURPLE, YELLOW, GREEN, WHITE};
+use macroquad::prelude::{is_key_down, is_key_pressed, Conf, KeyCode};
+use macroquad::prelude::{GRAY, GREEN, PURPLE, RED, WHITE, YELLOW};
+use macroquad::{shapes::draw_circle, text::draw_text, window::next_frame};
 use nalgebra as na;
+use rand::rngs::StdRng;
+use rand::{self, Rng, SeedableRng};
+use rayon::prelude::*;
 
 fn relu(x: f32) -> f32 {
     return x.max(0.);
@@ -24,14 +24,14 @@ fn outside(x: f32, y: f32) -> f32 {
     // weight
     let w1 = relu(d1 - c1.2 * c1.2);
     let w2 = relu(d2 - c2.2 * c2.2);
-    return  w1 * w2;
+    return w1 * w2;
 }
 
 fn test<const I: usize, const C: usize, const E: usize>(
     ai: &vai::VAI<I, 1, C, E>,
     random: &mut crate::rand::rngs::StdRng,
-    debug: impl Send + Fn(f32, f32, usize) -> ())
--> f32{
+    debug: impl Send + Fn(f32, f32, usize) -> (),
+) -> f32 {
     let tests = 1000;
     let random_lock = Arc::new(Mutex::new(random));
     let debug_lock = Arc::new(Mutex::new(debug));
@@ -40,9 +40,8 @@ fn test<const I: usize, const C: usize, const E: usize>(
     let inner = Arc::new(Mutex::new(0.));
     let miss_inner = Arc::new(Mutex::new(0.));
     (0..tests).into_par_iter().for_each(|_| {
-
-        let x:f32;
-        let y:f32;
+        let x: f32;
+        let y: f32;
         {
             let mut random = random_lock.lock().unwrap();
             x = random.gen();
@@ -57,7 +56,7 @@ fn test<const I: usize, const C: usize, const E: usize>(
         // input[3] = ((x*std::f32::consts::PI).sin() + (y*std::f32::consts::PI).sin()) * 0.5;
         let out = ai.process(&input)[0];
         let actual = outside(x, y);
-        let path:usize;
+        let path: usize;
         if actual > 0. {
             *outer.lock().unwrap() += 1.;
             if !(out > 0.) {
@@ -79,7 +78,7 @@ fn test<const I: usize, const C: usize, const E: usize>(
     });
     let mut outer_cost = 0.;
     if *outer.lock().unwrap() > 0. {
-        outer_cost = *miss_outer.lock().unwrap()/ *outer.lock().unwrap();
+        outer_cost = *miss_outer.lock().unwrap() / *outer.lock().unwrap();
         outer_cost *= outer_cost;
     }
     let mut inner_cost = 0.;
@@ -104,7 +103,7 @@ fn window_conf() -> Conf {
 async fn main() {
     let mut rng = StdRng::seed_from_u64(0);
     let mut best_ai = vai::VAI::<3, 1, 16, 1>::new_deterministic(0);
-    let mut score = test(&best_ai, &mut rng, |_,_,_| ());
+    let mut score = test(&best_ai, &mut rng, |_, _, _| ());
 
     println!("Starting ai:\n{}", best_ai);
     println!("Starting score: {}", score);
@@ -139,8 +138,8 @@ async fn main() {
                 } else {
                     test_ai = best_ai.create_variant(rand::random::<f32>());
                 }
-                let s = test(&test_ai, &mut rng, |_,_,_| ());
-                let re_check = test(&best_ai, &mut rng, |_,_,_| ());
+                let s = test(&test_ai, &mut rng, |_, _, _| ());
+                let re_check = test(&best_ai, &mut rng, |_, _, _| ());
                 // Constantly update best score based on new data
                 score = (score * 15. + re_check) * 0.0625;
                 if s < score {
@@ -154,7 +153,7 @@ async fn main() {
         }
         if !quiet {
             if show_best {
-                let r = test(&best_ai, &mut rng,  |x, y, result| {
+                let r = test(&best_ai, &mut rng, |x, y, result| {
                     let colors = [GRAY, RED, PURPLE, YELLOW, GREEN];
                     draw_circle(x * 250., y * 250., 2., colors[result]);
                 });
@@ -168,34 +167,48 @@ async fn main() {
             }
             draw_text(&format!("Tweaking: {}", tweaking), 10., 305., 20.0, WHITE);
         }
-        draw_text(&format!("Generation: {}", generation), 10., 290., 20.0, WHITE);
+        draw_text(
+            &format!("Generation: {}", generation),
+            10.,
+            290.,
+            20.0,
+            WHITE,
+        );
         if is_key_pressed(KeyCode::S) {
             match std::fs::File::create("./dotfield-save.vai") {
                 Ok(mut file) => {
                     match best_ai.write(&mut file) {
                         Ok(_) => {
                             println!("Saved matrix");
-                        },
-                        Err(err) => {println!("Save Error: {}", err)},
+                        }
+                        Err(err) => {
+                            println!("Save Error: {}", err)
+                        }
                     };
-                },
-                Err(err) => {println!("Save Error: {}", err)},
+                }
+                Err(err) => {
+                    println!("Save Error: {}", err)
+                }
             };
         }
         if is_key_pressed(KeyCode::O) {
             match std::fs::File::open("./dotfield-save.vai") {
                 Ok(file) => {
-                    match vai::VAI::<3, 1, 16, 1>::read(
-                        &mut std::io::BufReader::new(file).lines()) {
+                    match vai::VAI::<3, 1, 16, 1>::read(&mut std::io::BufReader::new(file).lines())
+                    {
                         Ok(result) => {
                             best_ai = result;
-                            score = test(&best_ai, &mut rng, |_,_,_| ());
+                            score = test(&best_ai, &mut rng, |_, _, _| ());
                             println!("Loaded matrix");
-                        },
-                        Err(err) => {println!("Load Error: {}", err)},
+                        }
+                        Err(err) => {
+                            println!("Load Error: {}", err)
+                        }
                     };
-                },
-                Err(err) => {println!("Load Error: {}", err)},
+                }
+                Err(err) => {
+                    println!("Load Error: {}", err)
+                }
             };
         }
 

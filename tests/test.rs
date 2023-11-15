@@ -1,8 +1,7 @@
-use std::assert;
 use nalgebra as na;
+use std::assert;
 
-fn linear_score<const C: usize, const H: usize>(ai: &vai::VAI<2,1,C,H>)
--> f32{
+fn linear_score<const C: usize, const H: usize>(ai: &vai::VAI<2, 1, C, H>) -> f32 {
     let m = -2.0;
     let b = 0.75;
     let mut score = 0.0;
@@ -16,8 +15,7 @@ fn linear_score<const C: usize, const H: usize>(ai: &vai::VAI<2,1,C,H>)
     return score;
 }
 
-fn non_linear_score<const C: usize, const H: usize>(ai: &vai::VAI<2,1,C,H>)
--> f32{
+fn non_linear_score<const C: usize, const H: usize>(ai: &vai::VAI<2, 1, C, H>) -> f32 {
     let mut score = 0.0;
     for i in 0..=10 {
         let x = 0.1 * i as f32;
