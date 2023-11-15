@@ -33,6 +33,12 @@ impl State {
             score: 0.
         }
     }
+    fn reset(&mut self) {
+        self.inputs = [0.,0.,1.];
+        self.target_timer = 0.;
+        self.lifetime = 0.;
+        self.score = 0.;
+    }
     fn update(&mut self, dt: f32) {
         self.lifetime += dt;
         self.target_timer += dt;
@@ -80,7 +86,7 @@ async fn main() {
     let mut paused = true;
     let mut quiet = false;
     let mut generation = 0;
-    let generation_duration = 500;
+    let generation_duration = 600;
     // box the states so they can be sorted quickly
     let mut simulations = Vec::<Box<State>>::new();
     for i in 0..200 {
@@ -106,8 +112,8 @@ async fn main() {
             let (worst, best) = simulations.split_at_mut(mid);
             for (good, bad) in zip(best, worst) {
                 bad.ai = good.ai.create_variant(0.1);
-                bad.score = 0.0;
-                good.score = 0.0;
+                bad.reset();
+                good.reset();
             }
             generation += 1;
             frame_count = 0;
