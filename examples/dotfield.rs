@@ -1,7 +1,9 @@
+#![allow(clippy::needless_return)]
+
 use std::io::BufRead;
 use std::sync::{Arc, Mutex};
 
-use macroquad::prelude::{is_key_down, is_key_pressed, Conf, KeyCode};
+use macroquad::prelude::{is_key_pressed, Conf, KeyCode};
 use macroquad::prelude::{GRAY, GREEN, PURPLE, RED, WHITE, YELLOW};
 use macroquad::{shapes::draw_circle, text::draw_text, window::next_frame};
 use nalgebra as na;
@@ -30,7 +32,7 @@ fn outside(x: f32, y: f32) -> f32 {
 fn test<const I: usize, const C: usize, const E: usize>(
     ai: &vai::VAI<I, 1, C, E>,
     random: &mut crate::rand::rngs::StdRng,
-    debug: impl Send + Fn(f32, f32, usize) -> (),
+    debug: impl Send + Fn(f32, f32, usize),
 ) -> f32 {
     let tests = 1000;
     let random_lock = Arc::new(Mutex::new(random));
@@ -59,11 +61,11 @@ fn test<const I: usize, const C: usize, const E: usize>(
         let path: usize;
         if actual > 0. {
             *outer.lock().unwrap() += 1.;
-            if !(out > 0.) {
+            if out > 0. {
+                path = 2;
+            } else {
                 path = 1;
                 *miss_outer.lock().unwrap() += 1.;
-            } else {
-                path = 2;
             }
         } else {
             *inner.lock().unwrap() += 1.;

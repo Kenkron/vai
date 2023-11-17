@@ -1,14 +1,13 @@
-use std::f32::consts::{PI, E};
+#![allow(clippy::needless_return)]
+
+use std::f32::consts::PI;
 use std::io::BufRead;
 use std::iter::zip;
-use std::sync::{Arc, Mutex};
 
-use macroquad::prelude::{is_key_down, is_key_pressed, Conf, KeyCode, draw_circle, draw_rectangle, draw_text};
+use macroquad::prelude::{is_key_pressed, Conf, KeyCode, draw_circle, draw_rectangle, draw_text};
 use macroquad::prelude::{RED, WHITE, BLUE, BLACK};
 use macroquad::window::next_frame;
-use rand;
 use rayon::prelude::*;
-use vai;
 
 const HIDDEN: usize = 1;
 const LAYERS: usize = 0;
@@ -84,7 +83,6 @@ fn draw_simulation(simulation: &State) {
 async fn main() {
     let mut step = false;
     let mut paused = true;
-    let mut quiet = false;
     let mut generation = 0;
     let generation_duration = 600;
     // box the states so they can be sorted quickly
@@ -99,7 +97,6 @@ async fn main() {
         }
         step ^= is_key_pressed(KeyCode::Enter);
         paused ^= is_key_pressed(KeyCode::Space);
-        quiet ^= is_key_pressed(KeyCode::Q);
         if is_key_pressed(KeyCode::P) {
             println!("best ai: {}", simulations.last().unwrap().ai);
         }
@@ -121,11 +118,12 @@ async fn main() {
 
         draw_simulation(simulations.last().unwrap().as_ref());
 
-        if !paused {
+        if !paused || step {
             simulations.par_iter_mut().for_each(|simulation| {
                 simulation.update(1./120.);
             });
             frame_count += 1;
+            step = false;
         }
 
         draw_text(
