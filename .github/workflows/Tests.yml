@@ -32,7 +32,6 @@ jobs:
     # Make sure CI fails on all warnings, including Clippy lints
     env:
       RUSTFLAGS: "-Dwarnings"
-    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       - name: Run Clippy
