@@ -11,27 +11,22 @@ env:
 
 jobs:
 
-  build:
+  test:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
     - name: Build
       run: cargo build --verbose
-
-  test:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
     - name: Run tests
       run: cargo test --verbose
 
   clippy_check:
-    needs: build
     runs-on: ubuntu-latest
     # Make sure CI fails on all warnings, including Clippy lints
     env:
       RUSTFLAGS: "-Dwarnings"
     steps:
+      - uses: actions/checkout@v3
       - name: Run Clippy
         run: cargo clippy --all-targets --all-features
 
