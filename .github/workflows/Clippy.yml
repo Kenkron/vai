@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - master
+  pull_request:
+    branches:
+      - master
 
 # Make sure CI fails on all warnings, including Clippy lints
 env:
