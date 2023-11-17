@@ -6,9 +6,8 @@ use std::io::{Lines, Write};
 use std::{fmt::Display, fs::File};
 
 extern crate nalgebra as na;
-use na::{DMatrix, Scalar, RowDVector};
+use na::{DMatrix, RowDVector};
 extern crate rand;
-use rand::distributions::Distribution;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 
@@ -76,7 +75,7 @@ pub fn read_matrix(
     let row_line_error_result = || Result::Err(row_line_error());
 
     let first_line = lines.next().unwrap_or(row_line_error_result())?;
-    let num_rows: usize = first_line.parse().map_err(|e| row_line_error())?;
+    let num_rows: usize = first_line.parse().map_err(|_| row_line_error())?;
     let mut row_count = 0;
     let mut rows = Vec::<RowDVector<f32>>::new();
     for line in lines {
@@ -142,10 +141,10 @@ impl VAID {
     /// the number of input nodes, and ending with the number of output nodes.
     /// If this does not have at least two layers, the inputs will
     /// be mapped directly to outputs.
-    fn new_deterministic(seed: u64, layers: &[usize]) -> Self {
+    pub fn new_deterministic(seed: u64, layers: &[usize]) -> Self {
         let mut connections = Vec::<DMatrix<f32>>::new();
         for i in 0..layers.len()-1 {
-            connections.push(DMatrix::<f32>::zeros(layers[i] + 1, layers[i]));
+            connections.push(DMatrix::<f32>::zeros(layers[i + 1], layers[i]));
         }
         return Self {rng: StdRng::seed_from_u64(seed), connections}
     }
