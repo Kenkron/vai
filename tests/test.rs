@@ -1,3 +1,5 @@
+#![allow(clippy::needless_return)]
+
 use nalgebra as na;
 use std::assert;
 

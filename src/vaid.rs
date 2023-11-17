@@ -89,7 +89,7 @@ pub fn read_matrix(
         let row = RowDVector::from_row_slice(&vals);
 
         //skip empty rows
-        if row.len() > 0 {
+        if !row.is_empty() {
             rows.push(row);
             row_count += 1;
         }

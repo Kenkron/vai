@@ -1,3 +1,5 @@
+#![allow(clippy::needless_return)]
+
 use std::assert;
 
 fn linear_score(ai: &vai::VAID) -> f32 {

@@ -1,11 +1,11 @@
-use rand;
+#![allow(clippy::needless_return)]
+
 pub mod vai;
 pub mod vaid;
 pub use vai::VAI;
 pub use vaid::VAID;
 
-
-/// Maps a 0-1 valud to +- infinity, with low weighted extremes
+/// Maps a 0-1 value to +- infinity, with low weighted extremes
 pub fn infinite_map(input: f32) -> f32 {
     if input <= 0. || input >= 1. {
         return 0.;

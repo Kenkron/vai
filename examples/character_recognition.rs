@@ -1,3 +1,5 @@
+#![allow(clippy::needless_return)]
+
 extern crate rand;
 
 use std::io::BufRead;
@@ -9,7 +11,7 @@ use macroquad::prelude::*;
 use macroquad::{text::draw_text, window::next_frame};
 use nalgebra as na;
 
-const IMAGE_SIZE: usize = 16;
+const IMAGE_SIZE: usize = 12;
 const PIXEL_COUNT: usize = IMAGE_SIZE * IMAGE_SIZE;
 const INPUTS: usize = PIXEL_COUNT + 1;
 
@@ -20,7 +22,7 @@ fn create_random_render(render_target: RenderTarget, font: &Font) -> usize {
     cam.render_target = Some(render_target);
     set_camera(&cam);
     clear_background(BLACK);
-    let min_font_size = 12.0;
+    let min_font_size = 10.0;
     let font_size = min_font_size + random::<f32>() * (IMAGE_SIZE as f32 - min_font_size);
     let wiggle = IMAGE_SIZE as f32 - font_size;
     let x = random::<f32>() * wiggle;
@@ -86,14 +88,15 @@ async fn main() {
     let mut step = false;
 
     const H: usize = 0;
-    const C: usize = 32;
+    const C: usize = 20;
 
-    let mut best_ais: [vai::VAI<INPUTS, 10, C, H>; 5] = std::array::from_fn(|i| {
-        vai::VAI::<INPUTS, 10, C, H>::new_deterministic(i as u64).create_variant(1.0)
+    let mut best_ais: [Box<vai::VAI<INPUTS, 10, C, H>>; 3] = std::array::from_fn(|i| {
+        Box::new(vai::VAI::<INPUTS, 10, C, H>::new_deterministic(i as u64).create_variant(1.0))
     });
     let mut test_number = create_random_render(render_target, &font);
     let mut best_outputs = na::SMatrix::<f32, 10, 1>::zeros();
     let mut best_score = f32::INFINITY;
+    let tests_per_generation = 500;
     loop {
         pause ^= is_key_pressed(KeyCode::Space);
         step ^= is_key_pressed(KeyCode::Enter);
@@ -105,16 +108,15 @@ async fn main() {
             generation += 1;
             step = false;
             // Tuple: (ai, score)
-            let mut test_ais = vec![(vai::VAI::<INPUTS, 10, C, H>::new(), 0.0 as f32); 100];
+            let mut test_ais = vec![(Box::new(vai::VAI::<INPUTS, 10, C, H>::new()), 0.0); 24];
             for i in 0..test_ais.len() {
                 if i < best_ais.len() {
                     test_ais[i].0 = best_ais[i].clone();
                 } else {
                     let intensity = random::<f32>() + (i / best_ais.len()) as f32;
-                    test_ais[i].0 = best_ais[i % best_ais.len()].create_variant(intensity);
+                    test_ais[i].0 = Box::new(best_ais[i % best_ais.len()].create_variant(intensity));
                 }
             }
-            let tests_per_generation = 500;
             for _ in 0..tests_per_generation {
                 test_number = create_random_render(render_target, &font);
                 inputs = extract_pixels(&render_target.texture);
@@ -150,22 +152,20 @@ async fn main() {
             WHITE,
         );
         draw_text(
-            format!("Best Score: {}", best_score).as_str(),
+            format!("Best Score: %{}", 100. - 10.0 * best_score / tests_per_generation as f32).as_str(),
             10.,
             (IMAGE_SIZE * 20) as f32 + 40.,
             20.,
             WHITE,
         );
-        //let mut best_readable = String::new();
         let mut best_tuple = Vec::<(usize, f32)>::new();
         for i in 0..10 {
-            //best_readable = format!("{} {}", best_readable, best_outputs[i]);
             best_tuple.push((i, best_outputs[i]));
         }
         best_tuple.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        for i in 0..best_tuple.len() {
+        for (i, item) in best_tuple.iter().enumerate() {
             let mut color = ORANGE;
-            if best_tuple[i].0 == test_number {
+            if item.0 == test_number {
                 if i == 0 {
                     color = GREEN;
                 } else {
@@ -173,7 +173,7 @@ async fn main() {
                 }
             }
             draw_text(
-                format!("{}: {}", best_tuple[i].0, best_tuple[i].1).as_str(),
+                format!("{}: {}", item.0, item.1).as_str(),
                 10.0,
                 (IMAGE_SIZE * 20 + 60 + i * 20) as f32,
                 20.0,
@@ -204,7 +204,7 @@ async fn main() {
                         &mut std::io::BufReader::new(file).lines(),
                     ) {
                         Ok(result) => {
-                            best_ais[0] = result;
+                            best_ais[0] = Box::new(result);
                             println!("Loaded matrix");
                         }
                         Err(err) => {
