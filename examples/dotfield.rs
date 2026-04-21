@@ -26,7 +26,11 @@ fn outside(x: f32, y: f32) -> f32 {
     // weight
     let w1 = relu(d1 - c1.2 * c1.2);
     let w2 = relu(d2 - c2.2 * c2.2);
-    return w1 * w2;
+    if (w1 * w2 > 0.0) {
+        return 1.0;
+    } else {
+        return 0.0;
+    }
 }
 
 fn test<const I: usize, const C: usize, const E: usize>(
@@ -34,7 +38,7 @@ fn test<const I: usize, const C: usize, const E: usize>(
     random: &mut crate::rand::rngs::StdRng,
     debug: impl Send + Fn(f32, f32, usize),
 ) -> f32 {
-    let tests = 1000;
+    let tests = 2000;
     let random_lock = Arc::new(Mutex::new(random));
     let debug_lock = Arc::new(Mutex::new(debug));
     let outer = Arc::new(Mutex::new(0.));
@@ -136,9 +140,9 @@ async fn main() {
                 generation += 1;
                 // Some mutations will be big, some small
                 if tweaking {
-                    test_ai = best_ai.create_layer_variant(rand::random::<f32>());
+                    test_ai = best_ai.create_layer_variant(rand::random::<f32>() * 0.5, &mut rng);
                 } else {
-                    test_ai = best_ai.create_variant(rand::random::<f32>());
+                    test_ai = best_ai.create_variant(rand::random::<f32>() * 0.5, &mut rng);
                 }
                 let s = test(&test_ai, &mut rng, |_, _, _| ());
                 let re_check = test(&best_ai, &mut rng, |_, _, _| ());
