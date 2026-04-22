@@ -38,7 +38,12 @@ fn backpropogation<const I: usize, const C: usize, const E: usize>(
 	let test_points: Vec<_> = (0..tests).map(|| { (random.gen(), random.gen()) }).collect();
     let debug_lock = Arc::new(Mutex::new(debug));
     test_points.into_par_iter().map(|(x, y)| {
-    	let expected = na::SVector<f32, 1>::from_element(outside(x, y));
+    	let expected_output = na::SVector<f32, 1>::from_element(outside(x, y));
+        let mut input = na::SMatrix::<f32, I, 1>::zeros();
+        input[0] = 1.0;
+        input[1] = x;
+        input[2] = y;
+    	let bp = ai.backpropogate(input, expected_output);
     });
 }
 

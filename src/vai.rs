@@ -390,3 +390,31 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
         return Ok(result);
     }
 }
+
+impl<`a, const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize> Add for
+    'a VAI<I, O, C, EXTRA_LAYERS>
+{
+	type Output = Self;
+
+	fn add(&self, other: &Self) -> Self {
+		Self {
+			input_connections: self.input_connections + other.input_connections,
+			output_connections: self.output_connections + other.output_connections,
+			hidden_connections: self.hidden_connections + other.hidden_connections
+		}
+	}
+}
+
+impl<`a, const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize> Sub for
+    'a VAI<I, O, C, EXTRA_LAYERS>
+{
+	type Output = Self;
+
+	fn sub(self, other: Self) -> Self {
+		Self {
+			input_connections: self.input_connections - other.input_connections,
+			output_connections: self.output_connections - other.output_connections,
+			hidden_connections: self.hidden_connections - other.hidden_connections
+		}
+	}
+}
