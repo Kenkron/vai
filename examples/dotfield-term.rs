@@ -28,6 +28,20 @@ fn outside(x: f32, y: f32) -> f32 {
     return w1 * w2;
 }
 
+fn backpropogation<const I: usize, const C: usize, const E: usize>(
+    ai: &vai::VAI<I, 1, C, E>,
+    tests: usize,
+    random: &mut crate::rand::rngs::StdRng,
+    debug: impl Send + Fn(f32, f32, usize),
+) -> vai::VAI<I, 1, C, E>
+{
+	let test_points: Vec<_> = (0..tests).map(|| { (random.gen(), random.gen()) }).collect();
+    let debug_lock = Arc::new(Mutex::new(debug));
+    test_points.into_par_iter().map(|(x, y)| {
+    	let expected = na::SVector<f32, 1>::from_element(outside(x, y));
+    });
+}
+
 fn test<const I: usize, const C: usize, const E: usize>(
     ai: &vai::VAI<I, 1, C, E>,
     random: &mut crate::rand::rngs::StdRng,
@@ -115,7 +129,7 @@ fn main() {
     });
 
    	let mut rng = StdRng::seed_from_u64(0);
-   	let mut best_ai = vai::VAI::<3, 1, 16, 1>::new_deterministic(0);
+   	let mut best_ai = vai::VAI::<3, 1, 16, 1>::new();
    	let mut score = test(&best_ai, &mut rng, |_, _, _| ());
    	let mut test_ai = best_ai.clone();
    	let mut tweaking = false;
@@ -138,9 +152,9 @@ fn main() {
                 generation += 1;
                 // Some mutations will be big, some small
                 if tweaking {
-                    test_ai = best_ai.create_layer_variant(rand::random::<f32>());
+                    test_ai = best_ai.create_layer_variant(rand::random::<f32>(), &mut rng);
                 } else {
-                    test_ai = best_ai.create_variant(rand::random::<f32>());
+                    test_ai = best_ai.create_variant(rand::random::<f32>(), &mut rng);
                 }
                 test_score = test(&test_ai, &mut rng, |_, _, _| ());
                 let re_check = test(&best_ai, &mut rng, |_, _, _| ());
