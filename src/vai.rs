@@ -6,10 +6,11 @@ use std::{fmt::Display, fs::File};
 
 extern crate nalgebra as na;
 use na::SMatrix;
+use nalgebra::SVector;
 extern crate rand;
+use crate::{infinite_map, rand_index};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
-use crate::{infinite_map, rand_index};
 
 /// Creates a random variation of a matrix
 /// * original - The matrix that will be varied
@@ -42,6 +43,30 @@ pub fn create_variant_stdrng<const R: usize, const C: usize>(
     let mut result = original.clone_owned();
     result.apply(|x| *x += intensity * infinite_map(rng.gen::<f32>()));
     return result;
+}
+
+pub fn backpropogate<const I: usize, const O: usize>(
+    activations: &na::SVector<f32, I>,
+    weights: &na::SMatrix<f32, O, I>,
+    costs: &na::SVector<f32, O>,
+    relu: bool,
+) -> na::SMatrix<f32, O, I> {
+    let mut weight_cost = SMatrix::<f32, O, I>::zeros();
+    for i in 0..I {
+        if activations[i] == 0.0 {
+            // if this had no activation, it had no effect
+            continue;
+        }
+        for o in 0..O {
+            let influence = activations[i] * weights.row(o).get(i).unwrap();
+            if relu && influence <= 0.0 {
+                // If a relu was applied, negative influence would be zero influence
+                continue;
+            }
+            weight_cost[(o, i)] = influence * costs[o];
+        }
+    }
+    return weight_cost;
 }
 
 /// Writes a matrix to a file with space-delimited columns,
@@ -116,7 +141,6 @@ pub fn read_matrix<const R: usize, const C: usize>(
 /// * EXTRA_LAYERS: There is always at least one hidden layer. This number adds more.
 #[derive(Clone)]
 pub struct VAI<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize> {
-    pub rng: StdRng,
     pub input_connections: na::SMatrix<f32, C, I>,
     pub hidden_connections: [na::SMatrix<f32, C, C>; EXTRA_LAYERS],
     pub output_connections: na::SMatrix<f32, O, C>,
@@ -156,11 +180,58 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
     /// using a specific seed for random number generatoin.
     pub fn new_deterministic(seed: u64) -> Self {
         Self {
-            rng: StdRng::seed_from_u64(seed),
             input_connections: na::SMatrix::<f32, C, I>::zeros(),
             hidden_connections: [na::SMatrix::<f32, C, C>::zeros(); EXTRA_LAYERS],
             output_connections: na::SMatrix::<f32, O, C>::zeros(),
         }
+    }
+
+    pub fn backpropogate(
+        &self,
+        inputs: &na::SVector<f32, I>,
+        expected_outputs: &na::SVector<f32, O>,
+    ) -> Self {
+        let mut difference = Self {
+            input_connections: na::SMatrix::<f32, C, I>::zeros(),
+            hidden_connections: [na::SMatrix::<f32, C, C>::zeros(); EXTRA_LAYERS],
+            output_connections: na::SMatrix::<f32, O, C>::zeros(),
+        };
+
+        let mut hidden_layers: Vec<SVector<f32, C>> = vec![];
+        let mut intermediate_layer = self.input_connections * inputs;
+        intermediate_layer.apply(|x| *x = x.max(0.));
+        hidden_layers.push(intermediate_layer);
+        for connection in self.hidden_connections {
+            intermediate_layer = connection * intermediate_layer;
+            intermediate_layer.apply(|x| *x = x.max(0.));
+            hidden_layers.push(intermediate_layer);
+        }
+        let outputs = self.output_connections * intermediate_layer;
+        let cost = expected_outputs - outputs;
+
+        let weight_cost = backpropogate(
+            &hidden_layers[hidden_layers.len() - 1],
+            &self.output_connections,
+            &cost,
+            false,
+        );
+        let mut layer_cost = weight_cost.row_sum_tr();
+        difference.output_connections = weight_cost;
+        for i in 0..self.hidden_connections.len() {
+            let weight_cost = backpropogate(
+                &hidden_layers[hidden_layers.len() - i],
+                &self.hidden_connections[self.hidden_connections.len() - i],
+                &layer_cost,
+                true,
+            );
+            layer_cost = weight_cost.row_sum_tr();
+            difference.hidden_connections[self.hidden_connections.len() - i] = weight_cost;
+        }
+
+        let weight_cost = backpropogate(&inputs, &self.input_connections, &layer_cost, true);
+        difference.input_connections = weight_cost;
+
+        return difference;
     }
 
     /// Creates a random variant of this VAI
@@ -177,17 +248,16 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
     /// see also:
     ///  * [`create_variant_stdrng`]
     ///  * [`VAI::create_layer_variant`]
-    pub fn create_variant(&mut self, intensity: f32) -> Self {
+    pub fn create_variant(&mut self, intensity: f32, rng: &mut StdRng) -> Self {
         let mut result = self.clone();
         let fields = I * C + C * C * EXTRA_LAYERS + C * O;
         let s_intensity = intensity / (1.0 + fields as f32);
-        result.input_connections =
-            create_variant_stdrng(&mut self.rng, &result.input_connections, intensity);
+        result.input_connections = create_variant_stdrng(rng, &result.input_connections, intensity);
         for mat in &mut result.hidden_connections {
-            *mat = create_variant_stdrng(&mut self.rng, mat, s_intensity);
+            *mat = create_variant_stdrng(rng, mat, s_intensity);
         }
         result.output_connections =
-            create_variant_stdrng(&mut self.rng, &result.output_connections, s_intensity);
+            create_variant_stdrng(rng, &result.output_connections, s_intensity);
         return result;
     }
 
@@ -205,7 +275,7 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
     ///
     /// see also:
     ///  * [`create_variant_stdrng`]
-    pub fn create_layer_variant(&mut self, intensity: f32) -> Self {
+    pub fn create_layer_variant(&mut self, intensity: f32, rng: &mut StdRng) -> Self {
         let mut result = self.clone();
         let hidden_connections = &mut result.hidden_connections;
         let layer = rand_index(hidden_connections.len() + 2);
@@ -213,18 +283,15 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
         match layer.cmp(&hidden_connections.len()) {
             Ordering::Less => {
                 let original = &hidden_connections[layer];
-                hidden_connections[layer] =
-                    create_variant_stdrng(&mut self.rng, original, intensity);
+                hidden_connections[layer] = create_variant_stdrng(rng, original, intensity);
             }
             Ordering::Equal => {
                 let original = &result.input_connections;
-                result.input_connections =
-                    create_variant_stdrng(&mut self.rng, original, intensity);
+                result.input_connections = create_variant_stdrng(rng, original, intensity);
             }
             Ordering::Greater => {
                 let original = &result.output_connections;
-                result.output_connections =
-                    create_variant_stdrng(&mut self.rng, original, intensity);
+                result.output_connections = create_variant_stdrng(rng, original, intensity);
             }
         }
         return result;
