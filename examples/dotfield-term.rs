@@ -119,6 +119,7 @@ fn main() {
    	let mut score = test(&best_ai, &mut rng, |_, _, _| ());
    	let mut test_ai = best_ai.clone();
    	let mut tweaking = false;
+   	let mut backpropogate = false;
    	let mut generation = 0;
    	let mut paused = true;
    	let mut step = false;
