@@ -149,6 +149,17 @@ impl VAID {
         return Self {rng: StdRng::seed_from_u64(seed), connections}
     }
 
+    /// Completely randomizez this VAI
+    pub fn randomize(&self, magnitude: f32) -> Self {
+        let mut result = self.clone();
+        for mat in &mut result.connections {
+            for val in mat {
+                *val = (result.rng.gen::<f32>() - 0.5) * 2.0 * magnitude;
+            }
+        }
+        return result
+    }
+
     /// Creates a random variant of this VAI
     /// * intensity - Scaler for the added randomness
     ///

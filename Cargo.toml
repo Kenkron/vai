@@ -2,6 +2,7 @@
 name = "vai"
 version = "0.1.0"
 edition = "2021"
+autoexamples = true
 authors = ["Christopher Waugh <kenkron@gmail.com>"]
 description = "Very Artificial Intelligence: a simple neural network"
 readme = "README.md"
@@ -11,7 +12,7 @@ keywords = ["ai", "evolutionary", "neural", "network"]
 
 [dependencies]
 nalgebra = { version = "0.32.1", features = ["rand"] }
-macroquad = { version = "0.3.25", optional = true }
+macroquad = { version = "0.3.25"}
 rand = "0.8.5"
 
 [dev-dependencies]
@@ -30,6 +31,10 @@ required-features = ["macroquad"]
 
 [[example]]
 name = "delay"
+required-features = ["macroquad"]
+
+[[example]]
+name = "creatures"
 required-features = ["macroquad"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
