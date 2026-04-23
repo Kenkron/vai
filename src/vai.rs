@@ -2,6 +2,7 @@
 
 use std::cmp::Ordering;
 use std::io::{self, Lines, Write};
+use std::ops::{Add, Sub};
 use std::{fmt::Display, fs::File};
 
 extern crate nalgebra as na;
@@ -391,30 +392,38 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
     }
 }
 
-impl<`a, const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize> Add for
-    'a VAI<I, O, C, EXTRA_LAYERS>
+impl<'a, const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize> Add
+    for &'a VAI<I, O, C, EXTRA_LAYERS>
 {
-	type Output = Self;
+    type Output = VAI<I, O, C, EXTRA_LAYERS>;
 
-	fn add(&self, other: &Self) -> Self {
-		Self {
-			input_connections: self.input_connections + other.input_connections,
-			output_connections: self.output_connections + other.output_connections,
-			hidden_connections: self.hidden_connections + other.hidden_connections
-		}
-	}
+    fn add(self, other: Self) -> Self::Output {
+        let mut hidden_connections = [SMatrix::<f32, C, C>::zeros(); EXTRA_LAYERS];
+        for i in 0..EXTRA_LAYERS {
+            hidden_connections[i] = self.hidden_connections[i] + other.hidden_connections[i];
+        }
+        VAI {
+            input_connections: self.input_connections + other.input_connections,
+            output_connections: self.output_connections + other.output_connections,
+            hidden_connections,
+        }
+    }
 }
 
-impl<`a, const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize> Sub for
-    'a VAI<I, O, C, EXTRA_LAYERS>
+impl<'a, const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize> Sub
+    for &'a VAI<I, O, C, EXTRA_LAYERS>
 {
-	type Output = Self;
+    type Output = VAI<I, O, C, EXTRA_LAYERS>;
 
-	fn sub(self, other: Self) -> Self {
-		Self {
-			input_connections: self.input_connections - other.input_connections,
-			output_connections: self.output_connections - other.output_connections,
-			hidden_connections: self.hidden_connections - other.hidden_connections
-		}
-	}
+    fn sub(self, other: Self) -> Self::Output {
+        let mut hidden_connections = [SMatrix::<f32, C, C>::zeros(); EXTRA_LAYERS];
+        for i in 0..EXTRA_LAYERS {
+            hidden_connections[i] = self.hidden_connections[i] - other.hidden_connections[i];
+        }
+        VAI {
+            input_connections: self.input_connections - other.input_connections,
+            output_connections: self.output_connections - other.output_connections,
+            hidden_connections,
+        }
+    }
 }
