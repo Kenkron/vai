@@ -28,24 +28,24 @@ fn outside(x: f32, y: f32) -> f32 {
     return w1 * w2;
 }
 
-fn backpropogation<const I: usize, const C: usize, const E: usize>(
-    ai: &vai::VAI<I, 1, C, E>,
-    tests: usize,
-    random: &mut crate::rand::rngs::StdRng,
-    debug: impl Send + Fn(f32, f32, usize),
-) -> vai::VAI<I, 1, C, E>
-{
-	let test_points: Vec<_> = (0..tests).map(|| { (random.gen(), random.gen()) }).collect();
-    let debug_lock = Arc::new(Mutex::new(debug));
-    test_points.into_par_iter().map(|(x, y)| {
-    	let expected_output = na::SVector<f32, 1>::from_element(outside(x, y));
-        let mut input = na::SMatrix::<f32, I, 1>::zeros();
-        input[0] = 1.0;
-        input[1] = x;
-        input[2] = y;
-    	let bp = ai.backpropogate(input, expected_output);
-    });
-}
+// fn backpropogation<const I: usize, const C: usize, const E: usize>(
+    // ai: &vai::VAI<I, 1, C, E>,
+    // tests: usize,
+    // random: &mut crate::rand::rngs::StdRng,
+    // debug: impl Send + Fn(f32, f32, usize),
+// ) -> vai::VAI<I, 1, C, E>
+// {
+	// let test_points: Vec<_> = (0..tests).map(|_| { (random.gen(), random.gen()) }).collect();
+    // let debug_lock = Arc::new(Mutex::new(debug));
+    // test_points.into_par_iter().map(|(x, y)| {
+    	// let expected_output = na::SVector<f32, 1>::from_element(outside(x, y));
+        // let mut input = na::SMatrix::<f32, I, 1>::zeros();
+        // input[0] = 1.0;
+        // input[1] = x;
+        // input[2] = y;
+    	// let bp = ai.backpropogate(input, expected_output);
+    // });
+// }
 
 fn test<const I: usize, const C: usize, const E: usize>(
     ai: &vai::VAI<I, 1, C, E>,

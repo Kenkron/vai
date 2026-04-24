@@ -3,6 +3,9 @@
 use nalgebra as na;
 use std::assert;
 
+use rand::rngs::StdRng;
+use rand::{self, SeedableRng};
+
 fn linear_score<const C: usize, const H: usize>(ai: &vai::VAI<2, 1, C, H>) -> f32 {
     let m = -2.0;
     let b = 0.75;
@@ -30,12 +33,13 @@ fn non_linear_score<const C: usize, const H: usize>(ai: &vai::VAI<2, 1, C, H>) -
 
 #[test]
 fn linear_test() {
-    let mut best_ai = vai::VAI::<2, 1, 4, 0>::new_deterministic(0);
+	let mut rng = StdRng::seed_from_u64(0);
+    let mut best_ai = vai::VAI::<2, 1, 4, 0>::new();
     let mut best_score = linear_score(&best_ai);
     let initial_score = best_score;
     println!("Initial Score: {}", initial_score);
     for i in 0..1000 {
-        let test_ai = best_ai.create_variant(1.0);
+        let test_ai = best_ai.create_variant(1.0, &mut rng);
         let test_score = linear_score(&test_ai);
         if test_score < best_score {
             best_ai = test_ai;
@@ -50,12 +54,13 @@ fn linear_test() {
 
 #[test]
 fn non_linear_test() {
-    let mut best_ai = vai::VAI::<2, 1, 4, 0>::new_deterministic(0);
+	let mut rng = StdRng::seed_from_u64(0);
+    let mut best_ai = vai::VAI::<2, 1, 4, 1>::new();
     let mut best_score = non_linear_score(&best_ai);
     let initial_score = best_score;
     println!("Initial Score: {}", initial_score);
     for i in 0..1000 {
-        let test_ai = best_ai.create_variant(1.0);
+        let test_ai = best_ai.create_variant(1.0, &mut rng);
         let test_score = non_linear_score(&test_ai);
         if test_score < best_score {
             best_ai = test_ai;
@@ -66,4 +71,16 @@ fn non_linear_test() {
     println!("Best Score: {}", best_score);
     println!("Best AI: {}", best_ai);
     assert!(best_score < initial_score * 0.1);
+}
+
+#[test]
+fn backpropogation() {
+	let mut ai = vai::VAI::<1, 1, 1, 0>::new();
+	ai.input_connections[(0, 0)] = 1.0;
+	ai.output_connections[(0, 0)] = 1.0;
+	println!("Initial NN: {}", ai);
+	ai = ai.backpropogate(&na::vector![1.0], &na::vector![3.0]);
+	println!("Backpropogated NN: {}", ai);
+	assert!((ai.input_connections[(0, 0)] - 2.0).abs() < 0.1);
+	assert!((ai.output_connections[(0, 0)] - 2.0).abs() < 0.1);
 }

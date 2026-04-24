@@ -14,7 +14,7 @@ const LAYERS: usize = 0;
 
 type AI = vai::VAI::<3, 1, HIDDEN, LAYERS>;
 
- struct State {
+struct State {
     ai: AI,
     inputs: [f32; 3],
     target_timer: f32,

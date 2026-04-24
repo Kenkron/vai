@@ -11,7 +11,7 @@ use nalgebra::SVector;
 extern crate rand;
 use crate::{infinite_map, rand_index};
 use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
+use rand::Rng;
 
 /// Creates a random variation of a matrix
 /// * original - The matrix that will be varied
@@ -38,7 +38,7 @@ pub fn create_variant<const R: usize, const C: usize>(
 /// resulting matrix can still be changed by an arbitrary amount.
 pub fn create_variant_stdrng<const R: usize, const C: usize>(
     rng: &mut StdRng,
-    original: &na::SMatrix<f32, R, C>,
+    original: &na::SMatrix::<f32, R, C>,
     intensity: f32,
 ) -> na::SMatrix<f32, R, C> {
     let mut result = original.clone_owned();
@@ -60,14 +60,15 @@ pub fn backpropogate<const I: usize, const O: usize>(
         }
         for o in 0..O {
             let influence = activations[i] * weights.row(o).get(i).unwrap();
-            if relu && influence <= 0.0 {
+            if relu && influence < 0.0 {
                 // If a relu was applied, negative influence would be zero influence
                 continue;
             }
             weight_cost[(o, i)] = influence * costs[o];
         }
     }
-    return weight_cost;
+    // if you have multiple inputs, they should share the cost
+    return weight_cost / I as f32;
 }
 
 /// Writes a matrix to a file with space-delimited columns,
@@ -187,6 +188,7 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
         }
     }
 
+	// Direction towards the expected output from the expected input
     pub fn backpropogate(
         &self,
         inputs: &na::SVector<f32, I>,
@@ -217,7 +219,7 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
             false,
         );
         let mut layer_cost = weight_cost.row_sum_tr();
-        difference.output_connections = weight_cost;
+        difference.output_connections = weight_cost / (EXTRA_LAYERS + 2) as f32;
         for i in 0..self.hidden_connections.len() {
             let weight_cost = backpropogate(
                 &hidden_layers[hidden_layers.len() - i],
@@ -226,13 +228,17 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
                 true,
             );
             layer_cost = weight_cost.row_sum_tr();
-            difference.hidden_connections[self.hidden_connections.len() - i] = weight_cost;
+            difference.hidden_connections[self.hidden_connections.len() - i] = weight_cost / (EXTRA_LAYERS + 2) as f32;
         }
 
         let weight_cost = backpropogate(&inputs, &self.input_connections, &layer_cost, true);
-        difference.input_connections = weight_cost;
+        difference.input_connections = weight_cost / (EXTRA_LAYERS + 2) as f32;
 
         return difference;
+    }
+
+    pub fn train(&self, inputs: T1, outputs: T2, training_weight: f32) -> Self {
+    	let trained
     }
 
     /// Creates a random variant of this VAI
