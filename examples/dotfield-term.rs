@@ -1,8 +1,8 @@
 #![allow(clippy::needless_return)]
 
 use std::io::{self, BufRead};
-use std::sync::{Arc, Mutex};
 use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 
 use nalgebra as na;
@@ -28,24 +28,28 @@ fn outside(x: f32, y: f32) -> f32 {
     return w1 * w2;
 }
 
-// fn backpropogation<const I: usize, const C: usize, const E: usize>(
-    // ai: &vai::VAI<I, 1, C, E>,
-    // tests: usize,
-    // random: &mut crate::rand::rngs::StdRng,
-    // debug: impl Send + Fn(f32, f32, usize),
-// ) -> vai::VAI<I, 1, C, E>
-// {
-	// let test_points: Vec<_> = (0..tests).map(|_| { (random.gen(), random.gen()) }).collect();
-    // let debug_lock = Arc::new(Mutex::new(debug));
-    // test_points.into_par_iter().map(|(x, y)| {
-    	// let expected_output = na::SVector<f32, 1>::from_element(outside(x, y));
-        // let mut input = na::SMatrix::<f32, I, 1>::zeros();
-        // input[0] = 1.0;
-        // input[1] = x;
-        // input[2] = y;
-    	// let bp = ai.backpropogate(input, expected_output);
-    // });
-// }
+fn backpropogation<const I: usize, const C: usize, const E: usize>(
+    ai: &vai::VAI<I, 1, C, E>,
+    tests: usize,
+    random: &mut crate::rand::rngs::StdRng,
+    debug: impl Send + Fn(f32, f32, usize),
+) -> vai::VAI<I, 1, C, E> {
+    let test_points: Vec<_> = (0..tests).map(|_| (random.gen(), random.gen())).collect();
+    let debug_lock = Arc::new(Mutex::new(debug));
+    test_points
+        .into_par_iter()
+        .map(|(x, y)| {
+            let expected_output = na::SVector::<f32, 1>::from_element(outside(x, y));
+            let mut input = na::SMatrix::<f32, I, 1>::zeros();
+            input[0] = 1.0;
+            input[1] = x;
+            input[2] = y;
+            ai.backpropogate(&input, &expected_output)
+        })
+        .fold(|| vai::VAI::<I, 1, C, E>::new(), |a, b| &a + &b)
+        .reduce_with(|a, b| &a + &b)
+        .unwrap_or_default()
+}
 
 fn test<const I: usize, const C: usize, const E: usize>(
     ai: &vai::VAI<I, 1, C, E>,
@@ -110,41 +114,38 @@ fn test<const I: usize, const C: usize, const E: usize>(
 }
 
 struct SimState {
-	rng: StdRng,
-    best_ai: vai::VAI::<3, 1, 16, 1>,
+    rng: StdRng,
+    best_ai: vai::VAI<3, 1, 16, 1>,
     score: f32,
-    test_ai: vai::VAI::<3, 1, 16, 1>,
+    test_ai: vai::VAI<3, 1, 16, 1>,
     tweaking: bool,
     generation: usize,
-    paused: bool, 
-    step:bool,
-	show_best: bool
+    paused: bool,
+    step: bool,
+    show_best: bool,
 }
 
 fn main() {
-
-	// read stdin on a separate thread
-	let (tx, rx) = mpsc::channel();
-    thread::spawn(move || {
-        loop {
-            let mut buffer = String::new();
-            io::stdin().read_line(&mut buffer).unwrap();
-            tx.send(buffer).unwrap();
-        }
+    // read stdin on a separate thread
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || loop {
+        let mut buffer = String::new();
+        io::stdin().read_line(&mut buffer).unwrap();
+        tx.send(buffer).unwrap();
     });
 
-   	let mut rng = StdRng::seed_from_u64(0);
-   	let mut best_ai = vai::VAI::<3, 1, 16, 1>::new();
-   	let mut score = test(&best_ai, &mut rng, |_, _, _| ());
-   	let mut test_ai = best_ai.clone();
-   	let mut tweaking = false;
-   	let mut backpropogate = false;
-   	let mut generation = 0;
-   	let mut paused = true;
-   	let mut step = false;
-   	let mut quiet = false;
-   	let mut show_best = true;
-    
+    let mut rng = StdRng::seed_from_u64(0);
+    let mut best_ai = vai::VAI::<3, 1, 16, 1>::new();
+    let mut score = test(&best_ai, &mut rng, |_, _, _| ());
+    let mut test_ai = best_ai.clone();
+    let mut tweaking = false;
+    let mut backpropogate = false;
+    let mut generation = 0;
+    let mut paused = true;
+    let mut step = false;
+    let mut quiet = false;
+    let mut show_best = true;
+
     println!("Starting score: {}", score);
     println!("Starting ai:\n{}", best_ai);
 
@@ -171,57 +172,61 @@ fn main() {
                 }
             }
         }
-        println!("Generation: {}, Best: {}, Test: {}", generation, score, test_score);
-    	if let Ok(raw_input) = rx.try_recv() {
-    		let input = raw_input.to_lowercase();
-	        if input.contains("quit") {
-    	        break;
+        println!(
+            "Generation: {}, Best: {}, Test: {}",
+            generation, score, test_score
+        );
+        if let Ok(raw_input) = rx.try_recv() {
+            let input = raw_input.to_lowercase();
+            if input.contains("quit") {
+                break;
             }
-	        tweaking ^= input.contains('t');
-	        step ^= input.contains('n');
-	        paused ^= input.contains(' ');
-	        quiet ^= input.contains('q');
-	        show_best ^= input.contains('b');
-	        if input.contains('p') {
-	            println!("best ai: {}", best_ai)
-	        }
-	        if input.contains('s') {
-	            match std::fs::File::create("./dotfield-save.vai") {
-	                Ok(mut file) => {
-	                    match best_ai.write(&mut file) {
-	                        Ok(_) => {
-	                            println!("Saved matrix");
-	                        }
-	                        Err(err) => {
-	                            println!("Save Error: {}", err)
-	                        }
-	                    };
-	                }
-	                Err(err) => {
-	                    println!("Save Error: {}", err)
-	                }
-	            };
-	        }
-	        if input.contains('o') {
-	            match std::fs::File::open("./dotfield-save.vai") {
-	                Ok(file) => {
-	                    match vai::VAI::<3, 1, 16, 1>::read(&mut std::io::BufReader::new(file).lines())
-	                    {
-	                        Ok(result) => {
-	                            best_ai = result;
-	                            score = test(&best_ai, &mut rng, |_, _, _| ());
-	                            println!("Loaded matrix");
-	                        }
-	                        Err(err) => {
-	                            println!("Load Error: {}", err)
-	                        }
-	                    };
-	                }
-	                Err(err) => {
-	                    println!("Load Error: {}", err)
-	                }
-	            };
-	        }
+            tweaking ^= input.contains('t');
+            step ^= input.contains('n');
+            paused ^= input.contains(' ');
+            quiet ^= input.contains('q');
+            show_best ^= input.contains('b');
+            if input.contains('p') {
+                println!("best ai: {}", best_ai)
+            }
+            if input.contains('s') {
+                match std::fs::File::create("./dotfield-save.vai") {
+                    Ok(mut file) => {
+                        match best_ai.write(&mut file) {
+                            Ok(_) => {
+                                println!("Saved matrix");
+                            }
+                            Err(err) => {
+                                println!("Save Error: {}", err)
+                            }
+                        };
+                    }
+                    Err(err) => {
+                        println!("Save Error: {}", err)
+                    }
+                };
+            }
+            if input.contains('o') {
+                match std::fs::File::open("./dotfield-save.vai") {
+                    Ok(file) => {
+                        match vai::VAI::<3, 1, 16, 1>::read(
+                            &mut std::io::BufReader::new(file).lines(),
+                        ) {
+                            Ok(result) => {
+                                best_ai = result;
+                                score = test(&best_ai, &mut rng, |_, _, _| ());
+                                println!("Loaded matrix");
+                            }
+                            Err(err) => {
+                                println!("Load Error: {}", err)
+                            }
+                        };
+                    }
+                    Err(err) => {
+                        println!("Load Error: {}", err)
+                    }
+                };
+            }
         }
     }
     println!("Final ai:\n{}", best_ai);
