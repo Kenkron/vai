@@ -2,7 +2,7 @@
 
 use std::cmp::Ordering;
 use std::io::{self, Lines, Write};
-use std::ops::{Add, Sub};
+use std::ops::{Add, Mul, Sub};
 use std::{fmt::Display, fs::File};
 
 extern crate nalgebra as na;
@@ -38,7 +38,7 @@ pub fn create_variant<const R: usize, const C: usize>(
 /// resulting matrix can still be changed by an arbitrary amount.
 pub fn create_variant_stdrng<const R: usize, const C: usize>(
     rng: &mut StdRng,
-    original: &na::SMatrix::<f32, R, C>,
+    original: &na::SMatrix<f32, R, C>,
     intensity: f32,
 ) -> na::SMatrix<f32, R, C> {
     let mut result = original.clone_owned();
@@ -188,7 +188,7 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
         }
     }
 
-	// Direction towards the expected output from the expected input
+    // Direction towards the expected output from the expected input
     pub fn backpropogate(
         &self,
         inputs: &na::SVector<f32, I>,
@@ -222,13 +222,13 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
         difference.output_connections = weight_cost / (EXTRA_LAYERS + 2) as f32;
         for i in 0..self.hidden_connections.len() {
             let weight_cost = backpropogate(
-                &hidden_layers[hidden_layers.len() - i],
-                &self.hidden_connections[self.hidden_connections.len() - i],
+                &hidden_layers[hidden_layers.len() - i - 1],
+                &self.hidden_connections[self.hidden_connections.len() - i - 1],
                 &layer_cost,
                 true,
             );
             layer_cost = weight_cost.row_sum_tr();
-            difference.hidden_connections[self.hidden_connections.len() - i] = weight_cost / (EXTRA_LAYERS + 2) as f32;
+            difference.hidden_connections[self.hidden_connections.len() - i - 1] = weight_cost;
         }
 
         let weight_cost = backpropogate(&inputs, &self.input_connections, &layer_cost, true);
@@ -237,8 +237,22 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
         return difference;
     }
 
-    pub fn train(&self, inputs: T1, outputs: T2, training_weight: f32) -> Self {
-    	let trained
+    pub fn train<A>(&self, data: A, scale: f32) -> Self
+    where
+        A: IntoIterator<Item = (SVector<f32, I>, SVector<f32, O>)>,
+    {
+        let mut error = Self::new();
+        let mut count = 0_usize;
+        for (input, expected_output) in data {
+            error = &error + &self.backpropogate(&input, &expected_output);
+            count += 1;
+        }
+        if count == 0 {
+            return self.clone();
+        }
+        let scaled_error = &error * (scale / count as f32);
+        println!("calculated error: {}", scaled_error);
+        self - &scaled_error
     }
 
     /// Creates a random variant of this VAI
@@ -429,6 +443,24 @@ impl<'a, const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usi
         VAI {
             input_connections: self.input_connections - other.input_connections,
             output_connections: self.output_connections - other.output_connections,
+            hidden_connections,
+        }
+    }
+}
+
+impl<'a, const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize> Mul<f32>
+    for &'a VAI<I, O, C, EXTRA_LAYERS>
+{
+    type Output = VAI<I, O, C, EXTRA_LAYERS>;
+
+    fn mul(self, other: f32) -> Self::Output {
+        let mut hidden_connections = [SMatrix::<f32, C, C>::zeros(); EXTRA_LAYERS];
+        for i in 0..EXTRA_LAYERS {
+            hidden_connections[i] = self.hidden_connections[i] * other;
+        }
+        VAI {
+            input_connections: self.input_connections * other,
+            output_connections: self.output_connections * other,
             hidden_connections,
         }
     }

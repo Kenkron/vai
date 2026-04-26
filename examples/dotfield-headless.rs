@@ -34,21 +34,18 @@ fn backpropogation<const I: usize, const C: usize, const E: usize>(
     random: &mut crate::rand::rngs::StdRng,
     debug: impl Send + Fn(f32, f32, usize),
 ) -> vai::VAI<I, 1, C, E> {
-    let test_points: Vec<_> = (0..tests).map(|_| (random.gen(), random.gen())).collect();
-    let debug_lock = Arc::new(Mutex::new(debug));
-    test_points
-        .into_par_iter()
-        .map(|(x, y)| {
-            let expected_output = na::SVector::<f32, 1>::from_element(outside(x, y));
-            let mut input = na::SMatrix::<f32, I, 1>::zeros();
-            input[0] = 1.0;
-            input[1] = x;
-            input[2] = y;
-            ai.backpropogate(&input, &expected_output)
-        })
-        .fold(|| vai::VAI::<I, 1, C, E>::new(), |a, b| &a + &b)
-        .reduce_with(|a, b| &a + &b)
-        .unwrap_or_default()
+    let test_points: Vec<_> = (0..tests)
+        .map(|_| (random.gen::<f32>(), random.gen::<f32>()))
+        .collect();
+    let training_data = test_points.iter().map(|(x, y)| {
+        let expected_output = na::SVector::<f32, 1>::from_element(outside(*x, *y));
+        let mut input = na::SMatrix::<f32, I, 1>::zeros();
+        input[0] = 1.0;
+        input[1] = *x;
+        input[2] = *y;
+        (input, expected_output)
+    });
+    ai.train(training_data, 1.0)
 }
 
 fn test<const I: usize, const C: usize, const E: usize>(
@@ -152,12 +149,14 @@ fn main() {
     loop {
         rng = StdRng::seed_from_u64(generation);
         let mut test_score = 0.0;
-        for _ in 0..16 {
+        for _ in 0..1 {
             if step || !paused {
                 step = false;
                 generation += 1;
                 // Some mutations will be big, some small
-                if tweaking {
+                if backpropogate {
+                    test_ai = backpropogation(&best_ai, 500, &mut rng, |_, _, _| {});
+                } else if tweaking {
                     test_ai = best_ai.create_layer_variant(rand::random::<f32>(), &mut rng);
                 } else {
                     test_ai = best_ai.create_variant(rand::random::<f32>(), &mut rng);
@@ -170,18 +169,21 @@ fn main() {
                     best_ai = test_ai.clone();
                     score = test_score;
                 }
+                println!(
+                    "Generation: {}, Best: {}, Test: {}",
+                    generation, score, test_score
+                );
             }
         }
-        println!(
-            "Generation: {}, Best: {}, Test: {}",
-            generation, score, test_score
-        );
         if let Ok(raw_input) = rx.try_recv() {
             let input = raw_input.to_lowercase();
             if input.contains("quit") {
                 break;
             }
-            tweaking ^= input.contains('t');
+            if input.contains('t') {
+                backpropogate = !backpropogate;
+                println!("Training: {}", backpropogate);
+            }
             step ^= input.contains('n');
             paused ^= input.contains(' ');
             quiet ^= input.contains('q');
