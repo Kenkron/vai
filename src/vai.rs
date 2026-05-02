@@ -13,6 +13,16 @@ use crate::{infinite_map, rand_index};
 use rand::rngs::StdRng;
 use rand::Rng;
 
+/// Used for classification wherein the largest value is the chosen
+/// category. Equivalent to the log(probability) for each value...
+/// Sort of.
+fn softmax(values: &[f32]) -> Vec<f32> {
+	let max_value = values.iter().fold(-f32::NEG_INFINITY, |acc, x| acc.max(*x));
+	let softmax_values: Vec<f32> = values.iter().map(|val| (val - max_value).exp()).collect();
+	let softmax_total = softmax_values.iter().fold(0.0, |acc, x| acc + x);
+	softmax_values.iter().map(|x| x / softmax_total).collect()
+}
+
 /// Creates a random variation of a matrix
 /// * original - The matrix that will be varied
 /// * intensity - The severity to which the matrix will be randomized.
