@@ -16,11 +16,22 @@ use rand::Rng;
 /// Used for classification wherein the largest value is the chosen
 /// category. Equivalent to the log(probability) for each value...
 /// Sort of.
-fn softmax(values: &[f32]) -> Vec<f32> {
-	let max_value = values.iter().fold(-f32::NEG_INFINITY, |acc, x| acc.max(*x));
-	let softmax_values: Vec<f32> = values.iter().map(|val| (val - max_value).exp()).collect();
-	let softmax_total = softmax_values.iter().fold(0.0, |acc, x| acc + x);
-	softmax_values.iter().map(|x| x / softmax_total).collect()
+fn softmax_slice(values: &[f32]) -> Vec<f32> {
+    let max_value = values.iter().fold(-f32::NEG_INFINITY, |acc, x| acc.max(*x));
+    let softmax_values: Vec<f32> = values.iter().map(|val| (val - max_value).exp()).collect();
+    let softmax_total = softmax_values.iter().fold(0.0, |acc, x| acc + x);
+    softmax_values.iter().map(|x| x / softmax_total).collect()
+}
+
+/// Used for classification wherein the largest value is the chosen
+/// category. Equivalent to the log(probability) for each value...
+/// Sort of.
+fn softmax<const O: usize>(values: SVector<f32, O>) -> SVector<f32, O> {
+    let max_value = values.max();
+    values.apply(|val| (val - max_value).exp()).collect();
+    let softmax_total = values.sum();
+    values.apply(|x| x / softmax_total);
+    values
 }
 
 /// Creates a random variation of a matrix
@@ -147,9 +158,9 @@ pub fn read_matrix<const R: usize, const C: usize>(
 }
 
 /// Very Artificial Intelligence.
-/// * I: Number of inputs. You should probably include a constant bias.
+/// * I: Number of inputs. The first element will always be set to 1 as a bias.
 /// * O: Number of outputs
-/// * C: Complexity of (number of nodes in) hidden layers
+/// * C: Complexity of (number of nodes in) hidden layers. The first one will always be set to 1 as a bias.
 /// * EXTRA_LAYERS: There is always at least one hidden layer. This number adds more.
 #[derive(Clone)]
 pub struct VAI<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize> {
@@ -203,6 +214,7 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
         &self,
         inputs: &na::SVector<f32, I>,
         expected_outputs: &na::SVector<f32, O>,
+        softmax: bool,
     ) -> Self {
         let mut difference = Self {
             input_connections: na::SMatrix::<f32, C, I>::zeros(),
@@ -220,7 +232,10 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
             hidden_layers.push(intermediate_layer);
         }
         let outputs = self.output_connections * intermediate_layer;
-        let cost = expected_outputs - outputs;
+        let mut cost = expected_outputs - outputs;
+        if softmax {
+            cost = softmax(cost);
+        }
 
         let weight_cost = backpropogate(
             &hidden_layers[hidden_layers.len() - 1],
@@ -248,6 +263,24 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
     }
 
     pub fn train<A>(&self, data: A, scale: f32) -> Self
+    where
+        A: IntoIterator<Item = (SVector<f32, I>, SVector<f32, O>)>,
+    {
+        let mut error = Self::new();
+        let mut count = 0_usize;
+        for (input, expected_output) in data {
+            error = &error + &self.backpropogate(&input, &expected_output);
+            count += 1;
+        }
+        if count == 0 {
+            return self.clone();
+        }
+        let scaled_error = &error * (scale / count as f32);
+        println!("calculated error: {}", scaled_error);
+        self - &scaled_error
+    }
+
+    pub fn train_categorizer<A>(&self, data: A, scale: f32) -> Self
     where
         A: IntoIterator<Item = (SVector<f32, I>, SVector<f32, O>)>,
     {
@@ -335,10 +368,18 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
     ///  * [`VAI::process_slice`]
     ///  * [`VAI::process_transparent`]
     pub fn process(&self, inputs: &na::SMatrix<f32, I, 1>) -> na::SMatrix<f32, O, 1> {
+        // Apply bias
+        if I > 0 {
+            inputs[0] = 1;
+        }
         let mut intermediate = self.input_connections * inputs;
         // Apply relu
         intermediate.apply(|x| *x = x.max(0.));
         for mat in &self.hidden_connections {
+            // Apply bias
+            if intermediate.len() > 0 {
+                intermediate[0] = 1;
+            }
             intermediate = mat * intermediate;
             // Apply relu
             intermediate.apply(|x| *x = x.max(0.));
@@ -366,21 +407,41 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
     ///
     /// see also:
     ///  * [`VAI::process_slice_transparent`]
-    pub fn process_transparent(&self, inputs: &na::SMatrix<f32, I, 1>) -> Vec<Vec<f32>> {
-        let mut output: Vec<Vec<f32>> = vec![inputs.iter().map(|x| x.to_owned()).collect()];
+    pub fn process_transparent(
+        &self,
+        inputs: &na::SVector<f32, I>,
+    ) -> (Vec<SVector<f32, C>>, SVector<f32, O>) {
+        let mut hidden_nodes: Vec<SVector<f32, C>> = vec![];
+
+        // clear input 0 for bias
+        if I > 0 {
+            inputs[0] = 0.0;
+        }
+        // Compute nodes
         let mut intermediate = self.input_connections * inputs;
-        output.push(intermediate.iter().map(|x| x.to_owned()).collect());
         // Apply relu
         intermediate.apply(|x| *x = x.max(0.));
-        for mat in &self.hidden_connections {
-            intermediate = mat * intermediate;
-            output.push(intermediate.iter().map(|x| x.to_owned()).collect());
+        // Add the bias
+        intermediate += self.input_connections.column(0);
+        // Clear node 0 for bias
+        intermediate[0] = 0.0;
+        // Add to hidden nodes
+        hidden_nodes.push(intermediate.clone());
+
+        for hidden_connection in &self.hidden_connections {
+            // Compute nodes
+            let mut intermediate = hidden_connection * intermediate;
             // Apply relu
             intermediate.apply(|x| *x = x.max(0.));
+            // Add the bias
+            intermediate += hidden_connection.column(0);
+            // Clear node 0 for bias
+            intermediate[0] = 0.0;
+            // Add to hidden nodes
+            hidden_nodes.push(intermediate.clone());
         }
-        let out = self.output_connections * intermediate;
-        output.push(out.iter().map(|x| x.to_owned()).collect());
-        return output;
+        let output = self.output_connections * intermediate;
+        return (hidden_nodes, output);
     }
 
     /// Runs an input slice through the neural network to get an output
