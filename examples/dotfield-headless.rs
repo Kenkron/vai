@@ -45,7 +45,7 @@ fn backpropogation<const I: usize, const C: usize, const E: usize>(
         input[2] = *y;
         (input, expected_output)
     });
-    ai.train(training_data, 1.0)
+    ai.train_categorizer(training_data, 1.0)
 }
 
 fn test<const I: usize, const C: usize, const E: usize>(

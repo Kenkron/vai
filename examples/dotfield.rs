@@ -3,13 +3,17 @@
 use std::io::BufRead;
 use std::sync::{Arc, Mutex};
 
-use macroquad::prelude::{is_key_pressed, Conf, KeyCode};
+use macroquad::prelude::{is_key_pressed, mouse_position, Conf, KeyCode, Vec2};
 use macroquad::prelude::{GRAY, GREEN, PURPLE, RED, WHITE, YELLOW};
 use macroquad::{shapes::draw_circle, text::draw_text, window::next_frame};
-use nalgebra as na;
+use nalgebra::{self as na, SVector, Vector2};
 use rand::rngs::StdRng;
 use rand::{self, Rng, SeedableRng};
 use rayon::prelude::*;
+use vai::softmax;
+
+const EXTRA_LAYERS: usize = 0;
+const LAYER_SIZE: usize = 2;
 
 fn relu(x: f32) -> f32 {
     return x.max(0.);
@@ -25,16 +29,67 @@ fn outside(x: f32, y: f32) -> f32 {
     let d2 = (c2.0 - x) * (c2.0 - x) + (c2.1 - y) * (c2.1 - y);
     // weight
     let w1 = relu(d1 - c1.2 * c1.2);
-    let w2 = relu(d2 - c2.2 * c2.2);
-    if (w1 * w2 > 0.0) {
+    let w2 = 1.0; //relu(d2 - c2.2 * c2.2);
+    if w1 * w2 > 0.0 {
         return 1.0;
     } else {
         return 0.0;
     }
 }
 
+// Categorize as inside or outside
+fn categorize(x: f32, y: f32) -> SVector<f32, 2> {
+    let out = outside(x, y);
+    Vector2::new(1.0 - out, out)
+}
+
+fn train<const I: usize, const C: usize, const E: usize>(
+    ai: &vai::VAI<I, 2, C, E>,
+    tests: usize,
+    random: &mut crate::rand::rngs::StdRng,
+    debug: impl Send + Fn(f32, f32, usize),
+) -> vai::VAI<I, 2, C, E> {
+    let test_points: Vec<_> = (0..tests)
+        .map(|_| (random.gen::<f32>(), random.gen::<f32>()))
+        .collect();
+    let training_data: Vec<_> = test_points
+        .iter()
+        .map(|(x, y)| {
+            let expected_output = categorize(*x, *y);
+            let mut input = na::SMatrix::<f32, I, 1>::zeros();
+            input[0] = 1.0;
+            input[1] = *x;
+            input[2] = *y;
+            (input, expected_output)
+        })
+        .collect();
+    ai.train_categorizer(&training_data, 10.0)
+}
+
+fn test_point<const I: usize, const C: usize, const E: usize>(
+    ai: &vai::VAI<I, 2, C, E>,
+    x: f32,
+    y: f32,
+) -> f32 {
+    let mut input = na::SMatrix::<f32, I, 1>::zeros();
+    input[0] = 1.0;
+    input[1] = x;
+    input[2] = y;
+    // This line of code, along with an extra input node, unsurprisingly makes the neural
+    // network run a lot better.
+    // input[3] = ((x*std::f32::consts::PI).sin() + (y*std::f32::consts::PI).sin()) * 0.5;
+    let out = ai.process(&input);
+    let softmaxed = vai::softmax_slice(out.as_slice());
+    let expected = categorize(x, y);
+    let costs = softmaxed
+        .iter()
+        .zip(expected.as_slice())
+        .map(|(actual, expected)| expected - actual);
+    costs.fold(0.0_f32, |acc, x| acc.max(x))
+}
+
 fn test<const I: usize, const C: usize, const E: usize>(
-    ai: &vai::VAI<I, 1, C, E>,
+    ai: &vai::VAI<I, 2, C, E>,
     random: &mut crate::rand::rngs::StdRng,
     debug: impl Send + Fn(f32, f32, usize),
 ) -> f32 {
@@ -45,6 +100,7 @@ fn test<const I: usize, const C: usize, const E: usize>(
     let miss_outer = Arc::new(Mutex::new(0.));
     let inner = Arc::new(Mutex::new(0.));
     let miss_inner = Arc::new(Mutex::new(0.));
+    let mut total_cost = Arc::new(Mutex::new(0.));
     (0..tests).into_par_iter().for_each(|_| {
         let x: f32;
         let y: f32;
@@ -60,12 +116,18 @@ fn test<const I: usize, const C: usize, const E: usize>(
         // This line of code, along with an extra input node, unsurprisingly makes the neural
         // network run a lot better.
         // input[3] = ((x*std::f32::consts::PI).sin() + (y*std::f32::consts::PI).sin()) * 0.5;
-        let out = ai.process(&input)[0];
-        let actual = outside(x, y);
+        let out = ai.process(&input);
+        let softmaxed = vai::softmax_slice(out.as_slice());
+        let expected = categorize(x, y);
+        let costs = softmaxed
+            .iter()
+            .zip(expected.as_slice())
+            .map(|(actual, expected)| expected - actual);
+        *total_cost.lock().unwrap() += costs.fold(0.0_f32, |acc, x| acc.max(x));
         let path: usize;
-        if actual > 0. {
+        if expected[1] > expected[0] {
             *outer.lock().unwrap() += 1.;
-            if out > 0. {
+            if out[1] > out[0] {
                 path = 2;
             } else {
                 path = 1;
@@ -73,7 +135,7 @@ fn test<const I: usize, const C: usize, const E: usize>(
             }
         } else {
             *inner.lock().unwrap() += 1.;
-            if out > 0. {
+            if out[1] > out[0] {
                 path = 3;
                 *miss_inner.lock().unwrap() += 1.;
             } else {
@@ -92,7 +154,13 @@ fn test<const I: usize, const C: usize, const E: usize>(
         inner_cost = *miss_inner.lock().unwrap() / *inner.lock().unwrap();
         inner_cost *= inner_cost;
     }
-    return (inner_cost + outer_cost) * 0.5;
+    println!(
+        "total_cost: {}, inner/outer cost: {}",
+        *total_cost.lock().unwrap(),
+        (inner_cost + outer_cost) * 0.5,
+    );
+    return *total_cost.lock().unwrap();
+    //return (inner_cost + outer_cost) * 0.5;
 }
 
 fn window_conf() -> Conf {
@@ -100,15 +168,29 @@ fn window_conf() -> Conf {
         window_title: "World's Worst AI".to_owned(),
         fullscreen: false,
         window_width: 250,
-        window_height: 350,
+        window_height: 500,
         ..Default::default()
+    }
+}
+
+fn draw_nn<const I: usize, const O: usize, const C: usize, const E: usize>(
+    nn: &vai::VAI<I, O, C, E>,
+    input: &SVector<f32, I>,
+    location: Vec2,
+    size: Vec2,
+) {
+    let xray = nn.process_slice_transparent(input.as_slice());
+    let x_spacing = size.x / (xray.len() as f32 + 1.0);
+    for l in 0..xray.len() {
+        let x = (l + 1) as f32 * x_spacing;
+        let neurons = &xray[l];
     }
 }
 
 #[macroquad::main(window_conf)]
 async fn main() {
     let mut rng = StdRng::seed_from_u64(0);
-    let mut best_ai = vai::VAI::<3, 1, 16, 1>::new_deterministic(0);
+    let mut best_ai = vai::VAI::<3, 2, LAYER_SIZE, EXTRA_LAYERS>::new();
     let mut score = test(&best_ai, &mut rng, |_, _, _| ());
 
     println!("Starting ai:\n{}", best_ai);
@@ -121,11 +203,12 @@ async fn main() {
     let mut step = false;
     let mut quiet = false;
     let mut show_best = true;
+    let mut training = false;
     loop {
         if is_key_pressed(KeyCode::Escape) {
             break;
         }
-        tweaking ^= is_key_pressed(KeyCode::T);
+        training ^= is_key_pressed(KeyCode::T);
         step ^= is_key_pressed(KeyCode::Enter);
         paused ^= is_key_pressed(KeyCode::Space);
         quiet ^= is_key_pressed(KeyCode::Q);
@@ -134,12 +217,14 @@ async fn main() {
             println!("best ai: {}", best_ai)
         }
         rng = StdRng::seed_from_u64(generation);
-        for _ in 0..16 {
+        let iterations = if training { 1 } else { 1 };
+        for _ in 0..iterations {
             if step || !paused {
                 step = false;
                 generation += 1;
-                // Some mutations will be big, some small
-                if tweaking {
+                if training {
+                    best_ai = train(&best_ai, 1000, &mut rng, |_, _, _| {});
+                } else if tweaking {
                     test_ai = best_ai.create_layer_variant(rand::random::<f32>() * 0.5, &mut rng);
                 } else {
                     test_ai = best_ai.create_variant(rand::random::<f32>() * 0.5, &mut rng);
@@ -171,7 +256,12 @@ async fn main() {
                 });
                 draw_text(&format!("Test score: {}\n", r), 10., 275., 20., WHITE);
             }
-            draw_text(&format!("Tweaking: {}", tweaking), 10., 305., 20.0, WHITE);
+            draw_text(&format!("Training: {}", training), 10., 300., 20.0, WHITE);
+            let (x, y) = mouse_position();
+            if x <= 250. && y <= 250. {
+                let mouse_cost = test_point(&best_ai, x / 250.0, y / 250.0);
+                draw_text(&format!("Mouse: {}", mouse_cost), 10., 325., 20.0, WHITE);
+            }
         }
         draw_text(
             &format!("Generation: {}", generation),
@@ -200,8 +290,9 @@ async fn main() {
         if is_key_pressed(KeyCode::O) {
             match std::fs::File::open("./dotfield-save.vai") {
                 Ok(file) => {
-                    match vai::VAI::<3, 1, 16, 1>::read(&mut std::io::BufReader::new(file).lines())
-                    {
+                    match vai::VAI::<3, 2, LAYER_SIZE, EXTRA_LAYERS>::read(
+                        &mut std::io::BufReader::new(file).lines(),
+                    ) {
                         Ok(result) => {
                             best_ai = result;
                             score = test(&best_ai, &mut rng, |_, _, _| ());

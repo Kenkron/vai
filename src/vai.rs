@@ -71,21 +71,21 @@ pub fn backpropogate<const I: usize, const O: usize>(
     activations: &na::SVector<f32, I>,
     weights: &na::SMatrix<f32, O, I>,
     costs: &na::SVector<f32, O>,
-    relu: bool,
 ) -> na::SMatrix<f32, O, I> {
     let mut weight_cost = SMatrix::<f32, O, I>::zeros();
-    for i in 0..I {
-        if activations[i] == 0.0 {
-            // if this had no activation, it had no effect
-            continue;
-        }
-        for o in 0..O {
+    for o in 0..O {
+        let mut total_error = 0.0;
+        for i in 0..I {
             let influence = activations[i] * weights.row(o).get(i).unwrap();
-            if relu && influence < 0.0 {
-                // If a relu was applied, negative influence would be zero influence
-                continue;
-            }
-            weight_cost[(o, i)] = influence * costs[o];
+            weight_cost[(o, i)] = influence;
+            total_error += weight_cost[(o, i)];
+        }
+        // Scale inputs relative to total cost
+        if total_error == 0.0 {
+            break;
+        }
+        for i in 0..I {
+            weight_cost[(o, i)] *= costs[o] / total_error;
         }
     }
     // if you have multiple inputs, they should share the cost
@@ -196,12 +196,6 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
 {
     /// Creates a VAI with zeros for all connection weights
     pub fn new() -> Self {
-        Self::new_deterministic(rand::random())
-    }
-
-    /// Creates a VAI with zeros for all connection weights,
-    /// using a specific seed for random number generatoin.
-    pub fn new_deterministic(seed: u64) -> Self {
         Self {
             input_connections: na::SMatrix::<f32, C, I>::zeros(),
             hidden_connections: [na::SMatrix::<f32, C, C>::zeros(); EXTRA_LAYERS],
@@ -241,7 +235,6 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
             &hidden_layers[hidden_layers.len() - 1],
             &self.output_connections,
             &cost,
-            false,
         );
         let mut layer_cost = weight_cost.row_sum_tr();
         difference.output_connections = weight_cost / (EXTRA_LAYERS + 2) as f32;
@@ -250,14 +243,13 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
                 &hidden_layers[hidden_layers.len() - i - 1],
                 &self.hidden_connections[self.hidden_connections.len() - i - 1],
                 &layer_cost,
-                true,
             );
             layer_cost = weight_cost.row_sum_tr();
             difference.hidden_connections[self.hidden_connections.len() - i - 1] = weight_cost;
         }
 
-        let weight_cost = backpropogate(&inputs, &self.input_connections, &layer_cost, true);
-        difference.input_connections = weight_cost / (EXTRA_LAYERS + 2) as f32;
+        //let weight_cost = backpropogate(&inputs, &self.input_connections, &layer_cost);
+        //difference.input_connections = weight_cost / (EXTRA_LAYERS + 2) as f32;
 
         return difference;
     }
@@ -276,7 +268,7 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
             return self.clone();
         }
         let scaled_error = &error * (scale / count as f32);
-        println!("calculated error: {}", scaled_error);
+        println!("scaled error: {}", scaled_error);
         self - &scaled_error
     }
 
