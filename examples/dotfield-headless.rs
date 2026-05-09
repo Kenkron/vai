@@ -14,7 +14,7 @@ fn relu(x: f32) -> f32 {
     return x.max(0.);
 }
 
-fn outside(x: f32, y: f32) -> f32 {
+fn outside(x: f32, y: f32) -> bool {
     // Overlap of two circles
     // x, y, r
     let c1 = (0.2, 0.3, 0.1);
@@ -25,7 +25,7 @@ fn outside(x: f32, y: f32) -> f32 {
     // weight
     let w1 = relu(d1 - c1.2 * c1.2);
     let w2 = relu(d2 - c2.2 * c2.2);
-    return w1 * w2;
+    return w1 * w2 > 0.0;
 }
 
 fn backpropogation<const I: usize, const C: usize, const E: usize>(
