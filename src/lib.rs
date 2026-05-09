@@ -2,6 +2,8 @@
 
 pub mod vai;
 pub mod vaid;
+pub use vai::softmax;
+pub use vai::softmax_slice;
 pub use vai::VAI;
 pub use vaid::VAID;
 
