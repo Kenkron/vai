@@ -367,24 +367,8 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
     /// see also:
     ///  * [`VAI::process_slice`]
     ///  * [`VAI::process_transparent`]
-    pub fn process(&self, inputs: &na::SMatrix<f32, I, 1>) -> na::SMatrix<f32, O, 1> {
-        // Apply bias
-        if I > 0 {
-            inputs[0] = 1;
-        }
-        let mut intermediate = self.input_connections * inputs;
-        // Apply relu
-        intermediate.apply(|x| *x = x.max(0.));
-        for mat in &self.hidden_connections {
-            // Apply bias
-            if intermediate.len() > 0 {
-                intermediate[0] = 1;
-            }
-            intermediate = mat * intermediate;
-            // Apply relu
-            intermediate.apply(|x| *x = x.max(0.));
-        }
-        return self.output_connections * intermediate;
+    pub fn process(&self, inputs: &na::SVector<f32, I>) -> na::SVector<f32, O> {
+        return self.process_transparent(inputs).1;
     }
 
     /// Runs an input slice through the neural network to get an output
@@ -411,12 +395,9 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
         &self,
         inputs: &na::SVector<f32, I>,
     ) -> (Vec<SVector<f32, C>>, SVector<f32, O>) {
-        let mut hidden_nodes: Vec<SVector<f32, C>> = vec![];
+        let mut hidden_nodes: Vec<SVector<f32, C>> =
+            Vec::with_capacity(&self.hidden_connections.len() + 1);
 
-        // clear input 0 for bias
-        if I > 0 {
-            inputs[0] = 0.0;
-        }
         // Compute nodes
         let mut intermediate = self.input_connections * inputs;
         // Apply relu
@@ -442,17 +423,6 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
         }
         let output = self.output_connections * intermediate;
         return (hidden_nodes, output);
-    }
-
-    /// Runs an input slice through the neural network to get an output
-    /// returning the value of all the nodes: input, hidden, and output.
-    /// * inputs - The inputs. One of them should be a constant for a bias.
-    ///
-    /// see also:
-    ///  * [`VAI::process_transparent`]
-    pub fn process_slice_transparent(&self, inputs: &[f32]) -> Vec<Vec<f32>> {
-        let matrix_inputs = na::SMatrix::<f32, I, 1>::from_column_slice(inputs);
-        return self.process_transparent(&matrix_inputs);
     }
 
     /// Writes a vai to a file, writing its input, hidden, and output
