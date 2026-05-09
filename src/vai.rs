@@ -28,9 +28,9 @@ fn softmax_slice(values: &[f32]) -> Vec<f32> {
 /// Sort of.
 fn softmax<const O: usize>(values: SVector<f32, O>) -> SVector<f32, O> {
     let max_value = values.max();
-    values.apply(|val| (val - max_value).exp()).collect();
+    values.apply(|val| (val -= max_value).exp(););
     let softmax_total = values.sum();
-    values.apply(|x| x / softmax_total);
+    values.apply(|x| x /= softmax_total;);
     values
 }
 
