@@ -16,8 +16,8 @@ use rand::Rng;
 /// Used for classification wherein the largest value is the chosen
 /// category. Equivalent to the log(probability) for each value...
 /// Sort of.
-fn softmax_slice(values: &[f32]) -> Vec<f32> {
-    let max_value = values.iter().fold(-f32::NEG_INFINITY, |acc, x| acc.max(*x));
+pub fn softmax_slice(values: &[f32]) -> Vec<f32> {
+    let max_value = values.iter().fold(f32::NEG_INFINITY, |acc, x| acc.max(*x));
     let softmax_values: Vec<f32> = values.iter().map(|val| (val - max_value).exp()).collect();
     let softmax_total = softmax_values.iter().fold(0.0, |acc, x| acc + x);
     softmax_values.iter().map(|x| x / softmax_total).collect()
@@ -26,11 +26,15 @@ fn softmax_slice(values: &[f32]) -> Vec<f32> {
 /// Used for classification wherein the largest value is the chosen
 /// category. Equivalent to the log(probability) for each value...
 /// Sort of.
-fn softmax<const O: usize>(values: SVector<f32, O>) -> SVector<f32, O> {
+pub fn softmax<const O: usize>(mut values: SVector<f32, O>) -> SVector<f32, O> {
     let max_value = values.max();
-    values.apply(|val| (val -= max_value).exp(););
+    values.apply(|val| {
+        *val = (*val - max_value).exp();
+    });
     let softmax_total = values.sum();
-    values.apply(|x| x /= softmax_total;);
+    values.apply(|x| {
+        *x /= softmax_total;
+    });
     values
 }
 
@@ -67,6 +71,7 @@ pub fn create_variant_stdrng<const R: usize, const C: usize>(
     return result;
 }
 
+//
 pub fn backpropogate<const I: usize, const O: usize>(
     activations: &na::SVector<f32, I>,
     weights: &na::SMatrix<f32, O, I>,
@@ -208,7 +213,7 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
         &self,
         inputs: &na::SVector<f32, I>,
         expected_outputs: &na::SVector<f32, O>,
-        softmax: bool,
+        softmax_cost: bool,
     ) -> Self {
         let mut difference = Self {
             input_connections: na::SMatrix::<f32, C, I>::zeros(),
@@ -227,7 +232,7 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
         }
         let outputs = self.output_connections * intermediate_layer;
         let mut cost = expected_outputs - outputs;
-        if softmax {
+        if softmax_cost {
             cost = softmax(cost);
         }
 
@@ -239,6 +244,9 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
         let mut layer_cost = weight_cost.row_sum_tr();
         difference.output_connections = weight_cost / (EXTRA_LAYERS + 2) as f32;
         for i in 0..self.hidden_connections.len() {
+            // The first value in an intermediate layer is an immutable bias
+            // Connections to it do not affect it, thus cannot contribute to the cost.
+            layer_cost[0] = 0.0;
             let weight_cost = backpropogate(
                 &hidden_layers[hidden_layers.len() - i - 1],
                 &self.hidden_connections[self.hidden_connections.len() - i - 1],
@@ -261,7 +269,7 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
         let mut error = Self::new();
         let mut count = 0_usize;
         for (input, expected_output) in data {
-            error = &error + &self.backpropogate(&input, &expected_output);
+            error = &error + &self.backpropogate(&input, &expected_output, false);
             count += 1;
         }
         if count == 0 {
@@ -279,7 +287,7 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
         let mut error = Self::new();
         let mut count = 0_usize;
         for (input, expected_output) in data {
-            error = &error + &self.backpropogate(&input, &expected_output);
+            error = &error + &self.backpropogate(&input, &expected_output, true);
             count += 1;
         }
         if count == 0 {
@@ -389,30 +397,38 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
     ) -> (Vec<SVector<f32, C>>, SVector<f32, O>) {
         let mut hidden_nodes: Vec<SVector<f32, C>> =
             Vec::with_capacity(&self.hidden_connections.len() + 1);
+        // The bias needs to be included *after* the activation function,
+        // so the bias field should be set to 0, and the biases added
+        // independently.
+        let mut input_sans_bias = inputs.clone();
+        input_sans_bias[0] = 0.0;
 
         // Compute nodes
-        let mut intermediate = self.input_connections * inputs;
+        let mut intermediate = self.input_connections * input_sans_bias;
         // Apply relu
         intermediate.apply(|x| *x = x.max(0.));
         // Add the bias
         intermediate += self.input_connections.column(0);
-        // Clear node 0 for bias
-        intermediate[0] = 0.0;
+        // Include bias as 1
+        intermediate[0] = 1.0;
         // Add to hidden nodes
         hidden_nodes.push(intermediate.clone());
 
         for hidden_connection in &self.hidden_connections {
+            // Clear bias
+            intermediate[0] = 0.0;
             // Compute nodes
-            let mut intermediate = hidden_connection * intermediate;
+            intermediate = hidden_connection * intermediate;
             // Apply relu
             intermediate.apply(|x| *x = x.max(0.));
             // Add the bias
             intermediate += hidden_connection.column(0);
-            // Clear node 0 for bias
-            intermediate[0] = 0.0;
+            // Include bias as 1
+            intermediate[0] = 1.0;
             // Add to hidden nodes
             hidden_nodes.push(intermediate.clone());
         }
+        // No activation function will be applied to the output
         let output = self.output_connections * intermediate;
         return (hidden_nodes, output);
     }

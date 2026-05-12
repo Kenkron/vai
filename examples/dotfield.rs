@@ -3,17 +3,17 @@
 use std::io::BufRead;
 use std::sync::{Arc, Mutex};
 
-use macroquad::prelude::{is_key_pressed, mouse_position, Conf, KeyCode, Vec2};
+use macroquad::prelude::{is_key_pressed, mouse_position, vec2, Color, Conf, KeyCode, Vec2};
 use macroquad::prelude::{GRAY, GREEN, PURPLE, RED, WHITE, YELLOW};
 use macroquad::{shapes::draw_circle, text::draw_text, window::next_frame};
-use nalgebra::{self as na, SVector, Vector2};
+use nalgebra::{self as na, SVector, Vector2, Vector3};
 use rand::rngs::StdRng;
 use rand::{self, Rng, SeedableRng};
 use rayon::prelude::*;
 use vai::softmax;
 
-const EXTRA_LAYERS: usize = 0;
-const LAYER_SIZE: usize = 2;
+const EXTRA_LAYERS: usize = 1;
+const LAYER_SIZE: usize = 8;
 
 fn relu(x: f32) -> f32 {
     return x.max(0.);
@@ -29,7 +29,7 @@ fn outside(x: f32, y: f32) -> f32 {
     let d2 = (c2.0 - x) * (c2.0 - x) + (c2.1 - y) * (c2.1 - y);
     // weight
     let w1 = relu(d1 - c1.2 * c1.2);
-    let w2 = 1.0; //relu(d2 - c2.2 * c2.2);
+    let w2 = relu(d2 - c2.2 * c2.2);
     if w1 * w2 > 0.0 {
         return 1.0;
     } else {
@@ -47,7 +47,6 @@ fn train<const I: usize, const C: usize, const E: usize>(
     ai: &vai::VAI<I, 2, C, E>,
     tests: usize,
     random: &mut crate::rand::rngs::StdRng,
-    debug: impl Send + Fn(f32, f32, usize),
 ) -> vai::VAI<I, 2, C, E> {
     let test_points: Vec<_> = (0..tests)
         .map(|_| (random.gen::<f32>(), random.gen::<f32>()))
@@ -63,7 +62,7 @@ fn train<const I: usize, const C: usize, const E: usize>(
             (input, expected_output)
         })
         .collect();
-    ai.train_categorizer(&training_data, 10.0)
+    ai.train_categorizer(training_data, 10.0)
 }
 
 fn test_point<const I: usize, const C: usize, const E: usize>(
@@ -100,7 +99,7 @@ fn test<const I: usize, const C: usize, const E: usize>(
     let miss_outer = Arc::new(Mutex::new(0.));
     let inner = Arc::new(Mutex::new(0.));
     let miss_inner = Arc::new(Mutex::new(0.));
-    let mut total_cost = Arc::new(Mutex::new(0.));
+    let total_cost = Arc::new(Mutex::new(0.));
     (0..tests).into_par_iter().for_each(|_| {
         let x: f32;
         let y: f32;
@@ -117,13 +116,13 @@ fn test<const I: usize, const C: usize, const E: usize>(
         // network run a lot better.
         // input[3] = ((x*std::f32::consts::PI).sin() + (y*std::f32::consts::PI).sin()) * 0.5;
         let out = ai.process(&input);
-        let softmaxed = vai::softmax_slice(out.as_slice());
+        let softmaxed = vai::softmax(out);
         let expected = categorize(x, y);
-        let costs = softmaxed
-            .iter()
-            .zip(expected.as_slice())
-            .map(|(actual, expected)| expected - actual);
-        *total_cost.lock().unwrap() += costs.fold(0.0_f32, |acc, x| acc.max(x));
+        let mut cost: f32 = 0.0;
+        for i in 0..softmaxed.len() {
+            cost = cost.max(expected[i] - softmaxed[i])
+        }
+        *total_cost.lock().unwrap() += cost;
         let path: usize;
         if expected[1] > expected[0] {
             *outer.lock().unwrap() += 1.;
@@ -159,8 +158,8 @@ fn test<const I: usize, const C: usize, const E: usize>(
         *total_cost.lock().unwrap(),
         (inner_cost + outer_cost) * 0.5,
     );
-    return *total_cost.lock().unwrap();
-    //return (inner_cost + outer_cost) * 0.5;
+    //return *total_cost.lock().unwrap();
+    return (inner_cost + outer_cost) * 0.5;
 }
 
 fn window_conf() -> Conf {
@@ -168,7 +167,7 @@ fn window_conf() -> Conf {
         window_title: "World's Worst AI".to_owned(),
         fullscreen: false,
         window_width: 250,
-        window_height: 500,
+        window_height: 700,
         ..Default::default()
     }
 }
@@ -179,11 +178,37 @@ fn draw_nn<const I: usize, const O: usize, const C: usize, const E: usize>(
     location: Vec2,
     size: Vec2,
 ) {
-    let xray = nn.process_slice_transparent(input.as_slice());
-    let x_spacing = size.x / (xray.len() as f32 + 1.0);
-    for l in 0..xray.len() {
-        let x = (l + 1) as f32 * x_spacing;
-        let neurons = &xray[l];
+    let (xray, output) = nn.process_transparent(input);
+    let x_spacing = size.x / (xray.len() as f32 + 3.0);
+    // Draw input nodes
+    let max_input = input.max();
+    let y_spacing = size.y / (input.len() as f32 + 1.0);
+    let x = location.x + x_spacing;
+    for (j, val) in input.iter().enumerate() {
+        let y = location.y + (j + 1) as f32 * y_spacing;
+        let proportion = val / max_input;
+        let color = Color::new(1.0 - proportion, proportion, 0.0, 1.0);
+        draw_circle(x, y, x_spacing / 4.0, color);
+    }
+    // Draw hidden nodes
+    for (i, layer) in xray.iter().enumerate() {
+        let softmax_layer = vai::softmax(layer.clone());
+        let y_spacing = size.y / (layer.len() as f32 + 1.0);
+        let x = location.x + x_spacing * (i + 2) as f32;
+        for (j, softmax_val) in softmax_layer.iter().enumerate() {
+            let y = location.y + (j + 1) as f32 * y_spacing;
+            let color = Color::new(1.0 - *softmax_val, *softmax_val, 0.0, 1.0);
+            draw_circle(x, y, x_spacing / 4.0, color);
+        }
+    }
+    // Draw output nodes
+    let softmax_output = vai::softmax(output.clone());
+    let y_spacing = size.y / (output.len() as f32 + 1.0);
+    let x = location.x + x_spacing * (E + 3) as f32;
+    for (j, softmax_val) in softmax_output.iter().enumerate() {
+        let y = location.y + (j + 1) as f32 * y_spacing;
+        let color = Color::new(1.0 - *softmax_val, *softmax_val, 0.0, 1.0);
+        draw_circle(x, y, x_spacing / 4.0, color);
     }
 }
 
@@ -191,6 +216,7 @@ fn draw_nn<const I: usize, const O: usize, const C: usize, const E: usize>(
 async fn main() {
     let mut rng = StdRng::seed_from_u64(0);
     let mut best_ai = vai::VAI::<3, 2, LAYER_SIZE, EXTRA_LAYERS>::new();
+    best_ai = best_ai.create_variant(1.0, &mut rng);
     let mut score = test(&best_ai, &mut rng, |_, _, _| ());
 
     println!("Starting ai:\n{}", best_ai);
@@ -223,7 +249,7 @@ async fn main() {
                 step = false;
                 generation += 1;
                 if training {
-                    best_ai = train(&best_ai, 1000, &mut rng, |_, _, _| {});
+                    best_ai = train(&best_ai, 1000, &mut rng);
                 } else if tweaking {
                     test_ai = best_ai.create_layer_variant(rand::random::<f32>() * 0.5, &mut rng);
                 } else {
@@ -261,6 +287,8 @@ async fn main() {
             if x <= 250. && y <= 250. {
                 let mouse_cost = test_point(&best_ai, x / 250.0, y / 250.0);
                 draw_text(&format!("Mouse: {}", mouse_cost), 10., 325., 20.0, WHITE);
+                let mouse_input = Vector3::new(1.0, x / 250.0, y / 250.0);
+                draw_nn(&best_ai, &mouse_input, vec2(0.0, 350.), vec2(250., 250.));
             }
         }
         draw_text(
