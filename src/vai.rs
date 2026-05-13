@@ -262,14 +262,21 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
         return difference;
     }
 
-    pub fn train<A>(&self, data: A, scale: f32) -> Self
-    where
-        A: IntoIterator<Item = (SVector<f32, I>, SVector<f32, O>)>,
-    {
+    pub fn train<A>(&self, data: &[(SVector<f32, I>, SVector<f32, O>)], scale: f32) -> Self {
         let mut error = Self::new();
         let mut count = 0_usize;
+
+        // Weight each case proportionally to its occurance
+        let mut weights = SVector::<f32, O>::zeros();
+        for (_, expected_output) in data {
+            weights += expected_output;
+        }
+        weights = weights.normalize();
+
         for (input, expected_output) in data {
-            error = &error + &self.backpropogate(&input, &expected_output, false);
+            let weight = weights.dot(expected_output);
+            error =
+                &error + &(&self.backpropogate(&input, &expected_output, false) * (1. / weight));
             count += 1;
         }
         if count == 0 {

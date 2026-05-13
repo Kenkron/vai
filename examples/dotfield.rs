@@ -13,7 +13,7 @@ use rayon::prelude::*;
 use vai::softmax;
 
 const EXTRA_LAYERS: usize = 1;
-const LAYER_SIZE: usize = 8;
+const LAYER_SIZE: usize = 16;
 
 fn relu(x: f32) -> f32 {
     return x.max(0.);
@@ -62,7 +62,7 @@ fn train<const I: usize, const C: usize, const E: usize>(
             (input, expected_output)
         })
         .collect();
-    ai.train_categorizer(training_data, 10.0)
+    ai.train_categorizer(training_data, 1.0)
 }
 
 fn test_point<const I: usize, const C: usize, const E: usize>(
@@ -216,7 +216,7 @@ fn draw_nn<const I: usize, const O: usize, const C: usize, const E: usize>(
 async fn main() {
     let mut rng = StdRng::seed_from_u64(0);
     let mut best_ai = vai::VAI::<3, 2, LAYER_SIZE, EXTRA_LAYERS>::new();
-    best_ai = best_ai.create_variant(1.0, &mut rng);
+    best_ai = best_ai.create_variant(100.0, &mut rng);
     let mut score = test(&best_ai, &mut rng, |_, _, _| ());
 
     println!("Starting ai:\n{}", best_ai);
