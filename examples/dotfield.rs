@@ -3,7 +3,9 @@
 use std::io::BufRead;
 use std::sync::{Arc, Mutex};
 
-use macroquad::prelude::{is_key_pressed, mouse_position, vec2, Color, Conf, KeyCode, Vec2};
+use macroquad::prelude::{
+    draw_line, is_key_pressed, mouse_position, vec2, Color, Conf, KeyCode, Vec2,
+};
 use macroquad::prelude::{GRAY, GREEN, PURPLE, RED, WHITE, YELLOW};
 use macroquad::{shapes::draw_circle, text::draw_text, window::next_frame};
 use nalgebra::{self as na, SVector, Vector2, Vector3};
@@ -184,9 +186,25 @@ fn draw_nn<const I: usize, const O: usize, const C: usize, const E: usize>(
     let max_input = input.max();
     let y_spacing = size.y / (input.len() as f32 + 1.0);
     let x = location.x + x_spacing;
+    let intermediate_x = x + x_spacing;
     for (j, val) in input.iter().enumerate() {
         let y = location.y + (j + 1) as f32 * y_spacing;
         let proportion = val / max_input;
+        for i in 0..C {
+            let intensity =
+                10. * nn.input_connections[(i, j)] * proportion / nn.input_connections.max();
+            let intermediate_y_spacing = size.y / (C as f32 + 1.0);
+            let intermediate_y = location.y + (i + 1) as f32 * intermediate_y_spacing;
+            let line_color = if intensity > 0. { GREEN } else { RED };
+            draw_line(
+                x,
+                y,
+                intermediate_x,
+                intermediate_y,
+                intensity.abs(),
+                line_color,
+            );
+        }
         let color = Color::new(1.0 - proportion, proportion, 0.0, 1.0);
         draw_circle(x, y, x_spacing / 4.0, color);
     }
