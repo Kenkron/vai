@@ -256,8 +256,8 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
             difference.hidden_connections[self.hidden_connections.len() - i - 1] = weight_cost;
         }
 
-        //let weight_cost = backpropogate(&inputs, &self.input_connections, &layer_cost);
-        //difference.input_connections = weight_cost / (EXTRA_LAYERS + 2) as f32;
+        let weight_cost = backpropogate(&inputs, &self.input_connections, &layer_cost);
+        difference.input_connections = weight_cost / (EXTRA_LAYERS + 2) as f32;
 
         return difference;
     }
