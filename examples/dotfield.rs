@@ -14,8 +14,8 @@ use rand::{self, Rng, SeedableRng};
 use rayon::prelude::*;
 use vai::softmax;
 
-const EXTRA_LAYERS: usize = 1;
-const LAYER_SIZE: usize = 16;
+const EXTRA_LAYERS: usize = 0;
+const LAYER_SIZE: usize = 12;
 
 fn relu(x: f32) -> f32 {
     return x.max(0.);
@@ -64,7 +64,7 @@ fn train<const I: usize, const C: usize, const E: usize>(
             (input, expected_output)
         })
         .collect();
-    ai.train_categorizer(training_data, 1.0)
+    ai.train_categorizer(training_data, 0.1)
 }
 
 fn test_point<const I: usize, const C: usize, const E: usize>(
@@ -155,11 +155,11 @@ fn test<const I: usize, const C: usize, const E: usize>(
         inner_cost = *miss_inner.lock().unwrap() / *inner.lock().unwrap();
         inner_cost *= inner_cost;
     }
-    println!(
-        "total_cost: {}, inner/outer cost: {}",
-        *total_cost.lock().unwrap(),
-        (inner_cost + outer_cost) * 0.5,
-    );
+    // println!(
+    //     "total_cost: {}, inner/outer cost: {}",
+    //     *total_cost.lock().unwrap(),
+    //     (inner_cost + outer_cost) * 0.5,
+    // );
     //return *total_cost.lock().unwrap();
     return (inner_cost + outer_cost) * 0.5;
 }
@@ -168,8 +168,8 @@ fn window_conf() -> Conf {
     Conf {
         window_title: "World's Worst AI".to_owned(),
         fullscreen: false,
-        window_width: 250,
-        window_height: 700,
+        window_width: 800,
+        window_height: 600,
         ..Default::default()
     }
 }
@@ -181,42 +181,82 @@ fn draw_nn<const I: usize, const O: usize, const C: usize, const E: usize>(
     size: Vec2,
 ) {
     let (xray, output) = nn.process_transparent(input);
+    let font = 16.0;
     let x_spacing = size.x / (xray.len() as f32 + 3.0);
     // Draw input nodes
-    let max_input = input.max();
+    let max_input = input.max().max(-input.min());
     let y_spacing = size.y / (input.len() as f32 + 1.0);
     let x = location.x + x_spacing;
-    let intermediate_x = x + x_spacing;
+    let inner_x = x + x_spacing;
     for (j, val) in input.iter().enumerate() {
         let y = location.y + (j + 1) as f32 * y_spacing;
         let proportion = val / max_input;
-        for i in 0..C {
+        for i in 1..C {
             let intensity =
                 10. * nn.input_connections[(i, j)] * proportion / nn.input_connections.max();
-            let intermediate_y_spacing = size.y / (C as f32 + 1.0);
-            let intermediate_y = location.y + (i + 1) as f32 * intermediate_y_spacing;
+            let inner_y_spacing = size.y / (C as f32 + 1.0);
+            let inner_y = location.y + (i + 1) as f32 * inner_y_spacing;
             let line_color = if intensity > 0. { GREEN } else { RED };
             draw_line(
                 x,
                 y,
-                intermediate_x,
-                intermediate_y,
-                intensity.abs(),
+                inner_x,
+                inner_y,
+                (intensity.abs() + 0.5).ln(),
                 line_color,
             );
         }
         let color = Color::new(1.0 - proportion, proportion, 0.0, 1.0);
         draw_circle(x, y, x_spacing / 4.0, color);
+        let tx = x - x_spacing / 8.0;
+        draw_text(&format!("{:.2}", val), tx, y, font, WHITE);
     }
     // Draw hidden nodes
     for (i, layer) in xray.iter().enumerate() {
-        let softmax_layer = vai::softmax(layer.clone());
+        let layer_max = layer.max().max(-layer.min());
         let y_spacing = size.y / (layer.len() as f32 + 1.0);
         let x = location.x + x_spacing * (i + 2) as f32;
-        for (j, softmax_val) in softmax_layer.iter().enumerate() {
+        for (j, val) in layer.iter().enumerate() {
             let y = location.y + (j + 1) as f32 * y_spacing;
-            let color = Color::new(1.0 - *softmax_val, *softmax_val, 0.0, 1.0);
+            let proportion = val / max_input;
+            let inner_x = x + x_spacing;
+            if i < xray.len() - 1 {
+                for c in 1..C {
+                    let intensity = 10.0 * nn.hidden_connections[i][(c, j)] * proportion
+                        / nn.hidden_connections[i].max();
+                    let inner_y_spacing = size.y / (C as f32 + 1.0);
+                    let inner_y = location.y + (c + 1) as f32 * inner_y_spacing;
+                    let line_color = if intensity > 0. { GREEN } else { RED };
+                    draw_line(
+                        x,
+                        y,
+                        inner_x,
+                        inner_y,
+                        (intensity.abs() + 0.5).ln(),
+                        line_color,
+                    );
+                }
+            } else {
+                for c in 0..O {
+                    let intensity = 10.0 * nn.output_connections[(c, j)] * proportion
+                        / nn.output_connections.max();
+                    let inner_y_spacing = size.y / (O as f32 + 1.0);
+                    let inner_y = location.y + (c + 1) as f32 * inner_y_spacing;
+                    let line_color = if intensity > 0. { GREEN } else { RED };
+                    draw_line(
+                        x,
+                        y,
+                        inner_x,
+                        inner_y,
+                        (intensity.abs() + 0.5).ln(),
+                        line_color,
+                    );
+                }
+            }
+            let color = if *val > 0.0 { GREEN } else { RED };
             draw_circle(x, y, x_spacing / 4.0, color);
+            let tx = x - x_spacing / 8.0;
+            draw_text(&format!("{:.2}", val), tx, y, font, WHITE);
         }
     }
     // Draw output nodes
@@ -227,6 +267,8 @@ fn draw_nn<const I: usize, const O: usize, const C: usize, const E: usize>(
         let y = location.y + (j + 1) as f32 * y_spacing;
         let color = Color::new(1.0 - *softmax_val, *softmax_val, 0.0, 1.0);
         draw_circle(x, y, x_spacing / 4.0, color);
+        let tx = x - x_spacing / 8.0;
+        draw_text(&format!("{:.2}", softmax_val), tx, y, font, WHITE);
     }
 }
 
@@ -234,7 +276,7 @@ fn draw_nn<const I: usize, const O: usize, const C: usize, const E: usize>(
 async fn main() {
     let mut rng = StdRng::seed_from_u64(0);
     let mut best_ai = vai::VAI::<3, 2, LAYER_SIZE, EXTRA_LAYERS>::new();
-    best_ai = best_ai.create_variant(100.0, &mut rng);
+    best_ai = best_ai.create_variant(1.0, &mut rng);
     let mut score = test(&best_ai, &mut rng, |_, _, _| ());
 
     println!("Starting ai:\n{}", best_ai);
@@ -277,7 +319,7 @@ async fn main() {
                 let re_check = test(&best_ai, &mut rng, |_, _, _| ());
                 // Constantly update best score based on new data
                 score = (score * 15. + re_check) * 0.0625;
-                if s < score {
+                if s <= score {
                     draw_text(&format!("Score was better: {}", s), 10., 260., 20., WHITE);
                     best_ai = test_ai.clone();
                     score = s;
@@ -306,7 +348,7 @@ async fn main() {
                 let mouse_cost = test_point(&best_ai, x / 250.0, y / 250.0);
                 draw_text(&format!("Mouse: {}", mouse_cost), 10., 325., 20.0, WHITE);
                 let mouse_input = Vector3::new(1.0, x / 250.0, y / 250.0);
-                draw_nn(&best_ai, &mouse_input, vec2(0.0, 350.), vec2(250., 250.));
+                draw_nn(&best_ai, &mouse_input, vec2(225.0, 0.), vec2(600., 600.));
             }
         }
         draw_text(
