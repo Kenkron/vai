@@ -71,30 +71,28 @@ pub fn create_variant_stdrng<const R: usize, const C: usize>(
     return result;
 }
 
-//
-pub fn backpropogate<const I: usize, const O: usize>(
+/// Find gradient of connections between two layers (readability function)
+pub fn gradient<const I: usize, const O: usize>(
+    activations: &na::SVector<f32, I>,
+    delta: &na::SVector<f32, O>,
+) -> na::SMatrix<f32, O, I> {
+    delta * activations.transpose()
+}
+
+/// Find gradient of connections between two layers (readability function)
+pub fn upstream_delta<const I: usize, const O: usize>(
     activations: &na::SVector<f32, I>,
     weights: &na::SMatrix<f32, O, I>,
-    costs: &na::SVector<f32, O>,
+    delta: &na::SVector<f32, O>,
 ) -> na::SMatrix<f32, O, I> {
-    let mut weight_cost = SMatrix::<f32, O, I>::zeros();
+    let mut result = SMatrix::<f32, O, I>::zeros();
     for o in 0..O {
-        let mut total_error = 0.0;
         for i in 0..I {
-            let influence = activations[i] * weights.row(o).get(i).unwrap();
-            weight_cost[(o, i)] = influence;
-            total_error += weight_cost[(o, i)];
-        }
-        // Scale inputs relative to total cost
-        if total_error == 0.0 {
-            break;
-        }
-        for i in 0..I {
-            weight_cost[(o, i)] *= costs[o] / total_error;
+            result[(o, i)] = activations[i] * weights[(o, i)] * delta[o];
         }
     }
     // if you have multiple inputs, they should share the cost
-    return weight_cost / I as f32;
+    result.row_sum_tr()
 }
 
 /// Writes a matrix to a file with space-delimited columns,
@@ -221,14 +219,14 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
             output_connections: na::SMatrix::<f32, O, C>::zeros(),
         };
 
-        let mut hidden_layers: Vec<SVector<f32, C>> = vec![];
+        let mut hidden_activations: Vec<SVector<f32, C>> = vec![];
         let mut intermediate_layer = self.input_connections * inputs;
         intermediate_layer.apply(|x| *x = x.max(0.));
-        hidden_layers.push(intermediate_layer);
+        hidden_activations.push(intermediate_layer);
         for connection in self.hidden_connections {
             intermediate_layer = connection * intermediate_layer;
             intermediate_layer.apply(|x| *x = x.max(0.));
-            hidden_layers.push(intermediate_layer);
+            hidden_activations.push(intermediate_layer);
         }
         let outputs = self.output_connections * intermediate_layer;
         let mut cost = expected_outputs - outputs;
@@ -236,28 +234,29 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
             cost = softmax(cost);
         }
 
-        let weight_cost = backpropogate(
-            &hidden_layers[hidden_layers.len() - 1],
+        let layer_gradient = gradient(&hidden_activations[hidden_activations.len() - 1], &cost);
+        let layer_delta = upstream_delta(
+            &hidden_activations[hidden_activations.len() - 1],
             &self.output_connections,
             &cost,
         );
-        let mut layer_cost = weight_cost.row_sum_tr();
-        difference.output_connections = weight_cost / (EXTRA_LAYERS + 2) as f32;
+        difference.output_connections = layer_delta / (EXTRA_LAYERS + 2) as f32;
         for i in 0..self.hidden_connections.len() {
             // The first value in an intermediate layer is an immutable bias
             // Connections to it do not affect it, thus cannot contribute to the cost.
-            layer_cost[0] = 0.0;
-            let weight_cost = backpropogate(
-                &hidden_layers[hidden_layers.len() - i - 1],
-                &self.hidden_connections[self.hidden_connections.len() - i - 1],
-                &layer_cost,
+            layer_delta[0] = 0.0;
+            let rev_i = self.hidden_connections.len() - i - 1;
+            let layer_gradient = gradient(&hidden_activations[rev_i], &layer_delta);
+            let layer_delta = upstream_delta(
+                &hidden_activations[rev_i],
+                &self.hidden_connections[rev_i],
+                &layer_delta,
             );
-            layer_cost = weight_cost.row_sum_tr();
-            difference.hidden_connections[self.hidden_connections.len() - i - 1] = weight_cost;
+            difference.hidden_connections[self.hidden_connections.len() - i - 1] = layer_gradient / (EXTRA_LAYERS + 2) as f32;
         }
 
-        let weight_cost = backpropogate(&inputs, &self.input_connections, &layer_cost);
-        difference.input_connections = weight_cost / (EXTRA_LAYERS + 2) as f32;
+        let layer_gradient = gradient(&inputs, &layer_delta);
+        difference.input_connections = layer_gradient / (EXTRA_LAYERS + 2) as f32;
 
         return difference;
     }

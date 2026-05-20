@@ -110,18 +110,6 @@ fn test<const I: usize, const C: usize, const E: usize>(
     return (inner_cost + outer_cost) * 0.5;
 }
 
-struct SimState {
-    rng: StdRng,
-    best_ai: vai::VAI<3, 1, 16, 1>,
-    score: f32,
-    test_ai: vai::VAI<3, 1, 16, 1>,
-    tweaking: bool,
-    generation: usize,
-    paused: bool,
-    step: bool,
-    show_best: bool,
-}
-
 fn main() {
     // read stdin on a separate thread
     let (tx, rx) = mpsc::channel();
