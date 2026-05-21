@@ -79,12 +79,11 @@ pub fn gradient<const I: usize, const O: usize>(
     delta * activations.transpose()
 }
 
-/// Find gradient of connections between two layers (readability function)
 pub fn upstream_delta<const I: usize, const O: usize>(
     activations: &na::SVector<f32, I>,
     weights: &na::SMatrix<f32, O, I>,
     delta: &na::SVector<f32, O>,
-) -> na::SMatrix<f32, O, I> {
+) -> na::SVector<f32, I> {
     let mut result = SMatrix::<f32, O, I>::zeros();
     for o in 0..O {
         for i in 0..I {
@@ -235,24 +234,25 @@ impl<const I: usize, const O: usize, const C: usize, const EXTRA_LAYERS: usize>
         }
 
         let layer_gradient = gradient(&hidden_activations[hidden_activations.len() - 1], &cost);
-        let layer_delta = upstream_delta(
+        let mut layer_delta = upstream_delta(
             &hidden_activations[hidden_activations.len() - 1],
             &self.output_connections,
             &cost,
         );
-        difference.output_connections = layer_delta / (EXTRA_LAYERS + 2) as f32;
+        difference.output_connections = layer_gradient / (EXTRA_LAYERS + 2) as f32;
         for i in 0..self.hidden_connections.len() {
             // The first value in an intermediate layer is an immutable bias
             // Connections to it do not affect it, thus cannot contribute to the cost.
             layer_delta[0] = 0.0;
             let rev_i = self.hidden_connections.len() - i - 1;
             let layer_gradient = gradient(&hidden_activations[rev_i], &layer_delta);
-            let layer_delta = upstream_delta(
+            layer_delta = upstream_delta(
                 &hidden_activations[rev_i],
                 &self.hidden_connections[rev_i],
                 &layer_delta,
             );
-            difference.hidden_connections[self.hidden_connections.len() - i - 1] = layer_gradient / (EXTRA_LAYERS + 2) as f32;
+            difference.hidden_connections[self.hidden_connections.len() - i - 1] =
+                layer_gradient / (EXTRA_LAYERS + 2) as f32;
         }
 
         let layer_gradient = gradient(&inputs, &layer_delta);

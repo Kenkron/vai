@@ -64,7 +64,7 @@ fn train<const I: usize, const C: usize, const E: usize>(
             (input, expected_output)
         })
         .collect();
-    ai.train_categorizer(training_data, 0.1)
+    ai.train_categorizer(training_data, 0.001)
 }
 
 fn test_point<const I: usize, const C: usize, const E: usize>(
